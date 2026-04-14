@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -12,7 +13,7 @@ st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
 # ──────────────────────────────────────────────
-url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?usp=sharing"
+url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 
 # ──────────────────────────────────────────────
@@ -27,29 +28,13 @@ def limpar_moeda(valor):
     """Converte valores monetários em float."""
     if pd.isna(valor) or str(valor).strip() in ("", "R$ -", " R$ - "):
         return 0.0
+
     v = str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()
+
     try:
         return float(v)
     except ValueError:
         return 0.0
-
-
-def build_img_url(row):
-    """
-    Monta a URL da imagem do produto.
-    Formato: BASE_URL + Código + 3 primeiros dígitos de Cor + "1.jpg"
-    Exemplo: Código=014482 | Cor="001 - PRETO" → 0144820011.jpg
-    Os 3 primeiros chars do campo Cor já são o código numérico da cor.
-    """
-    try:
-        codigo = str(row.get("Código", "")).strip()
-        cor    = str(row.get("Cor", "")).strip()   # campo exato da planilha
-        if codigo and cor and cor.lower() != "nan":
-            cor3 = cor[:3]          # "001 - PRETO" → "001"
-            return f"{BASE_IMG_URL}{codigo}{cor3}1.jpg"
-    except Exception:
-        pass
-    return ""
 
 
 def formatar_brl(valor: float) -> str:
@@ -57,28 +42,106 @@ def formatar_brl(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
+    """Converte uma coluna para datetime e normaliza para data."""
+    if coluna not in df.columns:
+        return pd.Series(pd.NaT, index=df.index)
+
+    return pd.to_datetime(df[coluna], errors="coerce", dayfirst=True).dt.normalize()
+
+
 def data_venda_efetiva(df: pd.DataFrame) -> pd.Series:
     """
     Retorna a data efetiva de venda:
-    - usa 'Data da Venda' quando preenchida
-    - caso contrário usa 'Data emissao'
+    usa 'Data da Venda' quando preenchida
+    caso contrário usa 'Data emissao'
     """
-    col_venda   = "Data da Venda"
-    col_emissao = "Data emissao"
+    series_venda = parse_data_coluna(df, "Data da Venda")
+    series_emissao = parse_data_coluna(df, "Data emissao")
+    return series_venda.fillna(series_emissao)
 
-    series_venda   = pd.to_datetime(df[col_venda],   errors="coerce", dayfirst=True) \
-                     if col_venda   in df.columns else pd.NaT
-    series_emissao = pd.to_datetime(df[col_emissao], errors="coerce", dayfirst=True) \
-                     if col_emissao in df.columns else pd.NaT
 
-    if isinstance(series_venda, pd.Series) and isinstance(series_emissao, pd.Series):
-        return series_venda.fillna(series_emissao)
-    elif isinstance(series_venda, pd.Series):
-        return series_venda
-    elif isinstance(series_emissao, pd.Series):
-        return series_emissao
+def normalizar_codigo(valor, tamanho_min=6):
+    """
+    Normaliza o código do produto preservando zeros à esquerda.
+    Ex.: 42333.0 vira 042333
+    """
+    if pd.isna(valor):
+        return ""
+
+    txt = str(valor).strip()
+
+    if txt.endswith(".0"):
+        txt = txt[:-2]
+
+    num = pd.to_numeric(txt, errors="coerce")
+    if pd.notna(num):
+        txt = str(int(num))
     else:
-        return pd.Series(pd.NaT, index=df.index)
+        txt = re.sub(r"\D", "", txt)
+
+    if not txt:
+        return ""
+
+    return txt.zfill(tamanho_min)
+
+
+def extrair_cor3(valor):
+    """
+    Extrai o código de cor com 3 dígitos.
+    Ex.: '001 - PRETO' -> '001'
+    """
+    if pd.isna(valor):
+        return ""
+
+    txt = str(valor).strip().upper()
+
+    m = re.match(r"^\s*(\d{1,3})", txt)
+    if m:
+        return m.group(1).zfill(3)
+
+    digitos = re.sub(r"\D", "", txt)
+    if digitos:
+        return digitos[:3].zfill(3)
+
+    return ""
+
+
+def build_img_url(row):
+    """
+    Monta a URL da imagem do produto.
+    Formato: BASE_URL + Código + Cor(3 dígitos) + '1.jpg'
+    Exemplo: 042333 + 003 + 1.jpg -> 0423330031.jpg
+    """
+    try:
+        codigo = normalizar_codigo(row.get("Código", ""))
+        cor3 = extrair_cor3(row.get("Cor", ""))
+
+        if codigo and cor3:
+            return f"{BASE_IMG_URL}{codigo}{cor3}1.jpg"
+    except Exception:
+        pass
+
+    return ""
+
+
+def preparar_metricas_visao(df_base: pd.DataFrame, somente_devolucao: bool) -> pd.DataFrame:
+    """
+    Quando estiver no modo devolução, exibe Receita, Líquido e Quantidade em valor absoluto
+    para facilitar a leitura do dashboard.
+    """
+    df_out = df_base.copy()
+
+    if somente_devolucao:
+        df_out["Receita_Visao"] = df_out["Receita_Num"].abs()
+        df_out["Liquido_Visao"] = df_out["Liquido_Num"].abs()
+        df_out["Qtd_Visao"] = df_out["Qtd_Num"].abs()
+    else:
+        df_out["Receita_Visao"] = df_out["Receita_Num"]
+        df_out["Liquido_Visao"] = df_out["Liquido_Num"]
+        df_out["Qtd_Visao"] = df_out["Qtd_Num"]
+
+    return df_out
 
 
 # ──────────────────────────────────────────────
@@ -86,21 +149,30 @@ def data_venda_efetiva(df: pd.DataFrame) -> pd.Series:
 # ──────────────────────────────────────────────
 try:
     df = conn.read(spreadsheet=url_planilha, ttl="0")
-    df.columns = [str(c).strip() for c in df.columns]   # remove espaços nos nomes
+    df.columns = [str(c).strip() for c in df.columns]
 
-    # Colunas monetárias  (nomes exatos da planilha)
+    # Colunas monetárias
     for col_orig, col_num in [
-        ("Receita",      "Receita_Num"),
-        ("Liquido",      "Liquido_Num"),   # sem acento
-        ("Custo medio",  "Custo_Num"),     # coluna correta
+        ("Receita", "Receita_Num"),
+        ("Liquido", "Liquido_Num"),
+        ("Custo medio", "Custo_Num"),
     ]:
         df[col_num] = df[col_orig].apply(limpar_moeda) if col_orig in df.columns else 0.0
 
     # Quantidade vendida numérica
     df["Qtd_Num"] = pd.to_numeric(df.get("Quantidade vendida"), errors="coerce").fillna(0)
 
-    # Data efetiva de venda
+    # Datas
+    df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
     df["Data_Venda_Efetiva"] = data_venda_efetiva(df)
+
+    # Marca devolução
+    df["Eh_Devolucao"] = (
+        df["Tipo pedido"]
+        .astype("string")
+        .str.upper()
+        .str.contains("DEVOLU", na=False)
+    )
 
     # URL de imagem
     df["img_url"] = df.apply(build_img_url, axis=1)
@@ -108,7 +180,7 @@ try:
     # ──────────────────────────────────────────
     # 6. VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
     # ──────────────────────────────────────────
-    colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido"]
+    colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido", "Data emissao"]
     if not all(col in df.columns for col in colunas_necessarias):
         st.error("Colunas obrigatórias não encontradas. Verifique a planilha.")
         st.write("Colunas detectadas:", df.columns.tolist())
@@ -119,32 +191,37 @@ try:
     # ──────────────────────────────────────────
     st.sidebar.header("🔍 Filtros")
 
-    # Filtro de Marketplace
     mkt_lista = sorted(df["Grupo de Marketplace"].dropna().unique())
-    mkt_sel   = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
+    mkt_sel = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
 
-    # Filtro de Marca  (coluna exata da planilha)
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
-        marca_sel   = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
+        marca_sel = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
     else:
         marca_sel = None
 
-    # Filtro de período
-    datas_validas = df["Data_Venda_Efetiva"].dropna()
+    somente_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
+
+    # Filtro de período agora por Data emissao
+    datas_validas = df["Data_Emissao_Filtro"].dropna()
+
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
         data_max = datas_validas.max().date()
-        periodo  = st.sidebar.date_input(
+
+        periodo = st.sidebar.date_input(
             "Período de Venda",
             value=(data_min, data_max),
             min_value=data_min,
             max_value=data_max,
         )
+
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
-            data_ini, data_fim = pd.Timestamp(periodo[0]), pd.Timestamp(periodo[1])
+            data_ini = pd.Timestamp(periodo[0]).normalize()
+            data_fim = pd.Timestamp(periodo[1]).normalize()
         else:
-            data_ini, data_fim = pd.Timestamp(data_min), pd.Timestamp(data_max)
+            data_ini = pd.Timestamp(data_min).normalize()
+            data_fim = pd.Timestamp(data_max).normalize()
     else:
         data_ini, data_fim = None, None
 
@@ -156,32 +233,41 @@ try:
     if marca_sel is not None:
         df_f = df_f[df_f["Marca"].isin(marca_sel)]
 
-    if data_ini and data_fim:
+    if data_ini is not None and data_fim is not None:
         df_f = df_f[
-            (df_f["Data_Venda_Efetiva"] >= data_ini) &
-            (df_f["Data_Venda_Efetiva"] <= data_fim)
+            (df_f["Data_Emissao_Filtro"] >= data_ini) &
+            (df_f["Data_Emissao_Filtro"] <= data_fim)
         ]
+
+    if somente_devolucao:
+        df_f = df_f[df_f["Eh_Devolucao"]].copy()
+
+    df_f = preparar_metricas_visao(df_f, somente_devolucao)
 
     # ──────────────────────────────────────────
     # 9. CABEÇALHO
     # ──────────────────────────────────────────
     st.title("📊 Dashboard de Performance de Vendas")
-    st.caption(f"{len(df_f):,} pedidos exibidos após filtros aplicados")
+
+    if somente_devolucao:
+        st.caption(f"{len(df_f):,} registros exibidos | modo devolução ativo | período filtrado por Data emissao")
+    else:
+        st.caption(f"{len(df_f):,} pedidos exibidos após filtros aplicados | período filtrado por Data emissao")
 
     # ──────────────────────────────────────────
     # 10. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
-    receita_total  = df_f["Receita_Num"].sum()
-    liquido_total  = df_f["Liquido_Num"].sum()
-    custo_medio    = df_f["Custo_Num"].mean() if df_f["Custo_Num"].sum() > 0 else 0.0
-    qtd_total      = int(df_f["Qtd_Num"].sum())
-    total_pedidos  = len(df_f)
+    receita_total = df_f["Receita_Visao"].sum()
+    liquido_total = df_f["Liquido_Visao"].sum()
+    custo_medio = df_f["Custo_Num"].mean() if len(df_f) > 0 else 0.0
+    qtd_total = int(df_f["Qtd_Visao"].sum())
+    total_pedidos = len(df_f)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("💰 Receita Total",    formatar_brl(receita_total))
-    c2.metric("✅ Líquido Total",    formatar_brl(liquido_total))
-    c3.metric("📦 Custo Médio",      formatar_brl(custo_medio))
-    c4.metric("📬 Itens Vendidos",   f"{qtd_total:,}")
+    c1.metric("💰 Receita Total", formatar_brl(receita_total))
+    c2.metric("✅ Líquido Total", formatar_brl(liquido_total))
+    c3.metric("📦 Custo Médio", formatar_brl(custo_medio))
+    c4.metric("📬 Itens Vendidos", f"{qtd_total:,}")
     c5.metric("🛒 Total de Pedidos", f"{total_pedidos:,}")
 
     st.divider()
@@ -189,14 +275,17 @@ try:
     # ──────────────────────────────────────────
     # 11. GRÁFICO: VENDAS POR DIA
     # ──────────────────────────────────────────
-    st.subheader("📅 Vendas por Dia (Receita)")
+    if somente_devolucao:
+        st.subheader("📅 Devoluções por Dia")
+    else:
+        st.subheader("📅 Vendas por Dia")
 
     if not df_f["Data_Venda_Efetiva"].isna().all():
         df_dia = (
-            df_f.groupby(df_f["Data_Venda_Efetiva"].dt.date)["Receita_Num"]
+            df_f.groupby(df_f["Data_Venda_Efetiva"].dt.date)["Receita_Visao"]
             .sum()
             .reset_index()
-            .rename(columns={"Data_Venda_Efetiva": "Data", "Receita_Num": "Receita"})
+            .rename(columns={"Data_Venda_Efetiva": "Data", "Receita_Visao": "Receita"})
         )
         df_dia["Data"] = pd.to_datetime(df_dia["Data"])
 
@@ -215,10 +304,10 @@ try:
             )
             .encode(
                 x=alt.X("Data:T", title="Data"),
-                y=alt.Y("Receita:Q", title="Receita (R$)"),
+                y=alt.Y("Receita:Q", title="Valor (R$)"),
                 tooltip=[
                     alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
-                    alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                    alt.Tooltip("Receita:Q", title="Valor", format=",.2f"),
                 ],
             )
             .properties(height=280)
@@ -232,30 +321,56 @@ try:
     # ──────────────────────────────────────────
     # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
-    st.subheader("🏪 Faturamento por Marketplace e Tipo de Pedido")
+    if somente_devolucao:
+        st.subheader("🏪 Devoluções por Marketplace")
+    else:
+        st.subheader("🏪 Faturamento por Marketplace e Tipo de Pedido")
 
-    df_mkt = (
-        df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
-        .sum()
-        .reset_index()
-        .rename(columns={"Receita_Num": "Receita"})
-    )
-
-    chart_bar = (
-        alt.Chart(df_mkt)
-        .mark_bar()
-        .encode(
-            x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
-            y=alt.Y("Receita:Q", title="Receita (R$)"),
-            color=alt.Color("Tipo pedido:N", title="Tipo"),
-            tooltip=[
-                "Grupo de Marketplace:N",
-                "Tipo pedido:N",
-                alt.Tooltip("Receita:Q", format=",.2f"),
-            ],
+    if somente_devolucao:
+        df_mkt = (
+            df_f.groupby(["Grupo de Marketplace"])["Receita_Visao"]
+            .sum()
+            .reset_index()
+            .rename(columns={"Receita_Visao": "Receita"})
         )
-        .properties(height=320)
-    )
+
+        chart_bar = (
+            alt.Chart(df_mkt)
+            .mark_bar()
+            .encode(
+                x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
+                y=alt.Y("Receita:Q", title="Valor (R$)"),
+                tooltip=[
+                    "Grupo de Marketplace:N",
+                    alt.Tooltip("Receita:Q", format=",.2f"),
+                ],
+            )
+            .properties(height=320)
+        )
+    else:
+        df_mkt = (
+            df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Visao"]
+            .sum()
+            .reset_index()
+            .rename(columns={"Receita_Visao": "Receita"})
+        )
+
+        chart_bar = (
+            alt.Chart(df_mkt)
+            .mark_bar()
+            .encode(
+                x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
+                y=alt.Y("Receita:Q", title="Receita (R$)"),
+                color=alt.Color("Tipo pedido:N", title="Tipo"),
+                tooltip=[
+                    "Grupo de Marketplace:N",
+                    "Tipo pedido:N",
+                    alt.Tooltip("Receita:Q", format=",.2f"),
+                ],
+            )
+            .properties(height=320)
+        )
+
     st.altair_chart(chart_bar, use_container_width=True)
 
     st.divider()
@@ -268,13 +383,16 @@ try:
     col_produto = "Produto" if "Produto" in df_f.columns else None
 
     if col_produto:
-        tab_receita, tab_qtd = st.tabs(["💰 Por Receita", "📦 Por Quantidade Vendida"])
+        if somente_devolucao:
+            tab_receita, tab_qtd = st.tabs(["💰 Por Valor Devolvido", "📦 Por Quantidade Devolvida"])
+        else:
+            tab_receita, tab_qtd = st.tabs(["💰 Por Receita", "📦 Por Quantidade Vendida"])
 
         df_rank_base = (
             df_f.groupby(col_produto)
             .agg(
-                Receita=("Receita_Num", "sum"),
-                Quantidade=("Qtd_Num", "sum"),
+                Receita=("Receita_Visao", "sum"),
+                Quantidade=("Qtd_Visao", "sum"),
                 img_url=("img_url", "first"),
             )
             .reset_index()
@@ -282,34 +400,30 @@ try:
 
         TOP_N = st.slider("Número de produtos no ranking", 5, 30, 10, key="top_n")
 
-        def render_ranking(df_rank: pd.DataFrame, col_valor: str, label: str, fmt_fn=None):
-            """Renderiza tabela de ranking com imagem do produto."""
+        def render_ranking(df_rank: pd.DataFrame, col_valor: str, fmt_fn=None):
             df_top = df_rank.nlargest(TOP_N, col_valor).reset_index(drop=True)
-            df_top.index += 1   # ranking começa em 1
+            df_top.index += 1
 
             for pos, row in df_top.iterrows():
                 cols = st.columns([0.5, 1.2, 5, 2])
-                cols[0].markdown(f"**#{pos}**")
+                cols[0].markdown(f"#{pos}")
 
-                # Imagem
                 if row["img_url"]:
                     cols[1].image(row["img_url"], width=60)
                 else:
                     cols[1].markdown("—")
 
-                # Nome do produto
-                cols[2].markdown(f"**{row[col_produto]}**")
+                cols[2].markdown(str(row[col_produto]))
 
-                # Valor
                 valor = row[col_valor]
                 texto = fmt_fn(valor) if fmt_fn else f"{int(valor):,}"
-                cols[3].markdown(f"**{texto}**")
+                cols[3].markdown(texto)
 
         with tab_receita:
-            render_ranking(df_rank_base, "Receita", "Receita", formatar_brl)
+            render_ranking(df_rank_base, "Receita", formatar_brl)
 
         with tab_qtd:
-            render_ranking(df_rank_base, "Quantidade", "Quantidade")
+            render_ranking(df_rank_base, "Quantidade")
 
     else:
         st.info("Coluna 'Produto' não encontrada na planilha.")
@@ -320,15 +434,33 @@ try:
     # 14. TABELA DETALHADA
     # ──────────────────────────────────────────
     with st.expander("📋 Ver Detalhamento dos Pedidos"):
-        colunas_exibir = [
-            c for c in [
-                "Data_Venda_Efetiva", "Grupo de Marketplace", "Tipo pedido",
-                "Marca", "Produto", "Receita", "Liquido", "Custo medio",
-                "Quantidade vendida", "Status do pedido",
-            ]
-            if c in df_f.columns or c == "Data_Venda_Efetiva"
+        df_exibir = df_f.copy()
+
+        if somente_devolucao:
+            df_exibir["Receita Visual"] = df_exibir["Receita_Visao"]
+            df_exibir["Quantidade Visual"] = df_exibir["Qtd_Visao"]
+            df_exibir["Liquido Visual"] = df_exibir["Liquido_Visao"]
+
+        colunas_base = [
+            "Data_Emissao_Filtro",
+            "Data_Venda_Efetiva",
+            "Grupo de Marketplace",
+            "Tipo pedido",
+            "Marca",
+            "Produto",
+            "Receita",
+            "Liquido",
+            "Custo medio",
+            "Quantidade vendida",
+            "Status do pedido",
         ]
-        st.dataframe(df_f[colunas_exibir], use_container_width=True)
+
+        if somente_devolucao:
+            colunas_base.extend(["Receita Visual", "Quantidade Visual", "Liquido Visual"])
+
+        colunas_exibir = [c for c in colunas_base if c in df_exibir.columns]
+
+        st.dataframe(df_exibir[colunas_exibir], use_container_width=True)
 
 except Exception as e:
     st.error(f"Não foi possível carregar os dados: {e}")
