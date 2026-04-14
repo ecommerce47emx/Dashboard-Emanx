@@ -639,7 +639,7 @@ try:
         df["Data_Emissao_Filtro"]
     )
 
-df["Dia_Grafico"] = pd.to_datetime(df["Data_Grafico"], errors="coerce").dt.normalize()
+    df["Dia_Grafico"] = pd.to_datetime(df["Data_Grafico"], errors="coerce").dt.normalize()
 
     df["Eh_Devolucao"] = (
         df["Grupo de Marketplace"]
