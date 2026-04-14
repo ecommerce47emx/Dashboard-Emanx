@@ -37,14 +37,15 @@ def limpar_moeda(valor):
 def build_img_url(row):
     """
     Monta a URL da imagem do produto.
-    Formato: BASE_URL + Código + 3 primeiros chars de COR + "1.jpg"
-    Ex.: https://emanxtelecom.com.br/imagens/ + 042333 + 003 + 1.jpg
+    Formato: BASE_URL + Código + 3 primeiros dígitos de Cor + "1.jpg"
+    Exemplo: Código=014482 | Cor="001 - PRETO" → 0144820011.jpg
+    Os 3 primeiros chars do campo Cor já são o código numérico da cor.
     """
     try:
         codigo = str(row.get("Código", "")).strip()
-        cor    = str(row.get("COR", "")).strip()
-        if codigo and cor:
-            cor3 = cor[:3].zfill(3)          # garante 3 dígitos
+        cor    = str(row.get("Cor", "")).strip()   # campo exato da planilha
+        if codigo and cor and cor.lower() != "nan":
+            cor3 = cor[:3]          # "001 - PRETO" → "001"
             return f"{BASE_IMG_URL}{codigo}{cor3}1.jpg"
     except Exception:
         pass
@@ -87,11 +88,11 @@ try:
     df = conn.read(spreadsheet=url_planilha, ttl="0")
     df.columns = [str(c).strip() for c in df.columns]   # remove espaços nos nomes
 
-    # Colunas monetárias
+    # Colunas monetárias  (nomes exatos da planilha)
     for col_orig, col_num in [
-        ("Receita",  "Receita_Num"),
-        ("Líquido",  "Liquido_Num"),
-        ("Custo",    "Custo_Num"),
+        ("Receita",      "Receita_Num"),
+        ("Liquido",      "Liquido_Num"),   # sem acento
+        ("Custo medio",  "Custo_Num"),     # coluna correta
     ]:
         df[col_num] = df[col_orig].apply(limpar_moeda) if col_orig in df.columns else 0.0
 
@@ -122,9 +123,9 @@ try:
     mkt_lista = sorted(df["Grupo de Marketplace"].dropna().unique())
     mkt_sel   = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
 
-    # Filtro de Marcas
-    if "Marcas" in df.columns:
-        marca_lista = sorted(df["Marcas"].dropna().unique())
+    # Filtro de Marca  (coluna exata da planilha)
+    if "Marca" in df.columns:
+        marca_lista = sorted(df["Marca"].dropna().unique())
         marca_sel   = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
     else:
         marca_sel = None
@@ -153,7 +154,7 @@ try:
     df_f = df[df["Grupo de Marketplace"].isin(mkt_sel)].copy()
 
     if marca_sel is not None:
-        df_f = df_f[df_f["Marcas"].isin(marca_sel)]
+        df_f = df_f[df_f["Marca"].isin(marca_sel)]
 
     if data_ini and data_fim:
         df_f = df_f[
@@ -177,11 +178,11 @@ try:
     total_pedidos  = len(df_f)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("💰 Receita Total",   formatar_brl(receita_total))
-    c2.metric("✅ Líquido Total",   formatar_brl(liquido_total))
-    c3.metric("📦 Custo Médio",     formatar_brl(custo_medio))
-    c4.metric("🛒 Total de Pedidos", f"{total_pedidos:,}")
-    c5.metric("📬 Itens Vendidos",   f"{qtd_total:,}")
+    c1.metric("💰 Receita Total",    formatar_brl(receita_total))
+    c2.metric("✅ Líquido Total",    formatar_brl(liquido_total))
+    c3.metric("📦 Custo Médio",      formatar_brl(custo_medio))
+    c4.metric("📬 Itens Vendidos",   f"{qtd_total:,}")
+    c5.metric("🛒 Total de Pedidos", f"{total_pedidos:,}")
 
     st.divider()
 
@@ -322,7 +323,7 @@ try:
         colunas_exibir = [
             c for c in [
                 "Data_Venda_Efetiva", "Grupo de Marketplace", "Tipo pedido",
-                "Marcas", "Produto", "Receita", "Líquido", "Custo",
+                "Marca", "Produto", "Receita", "Liquido", "Custo medio",
                 "Quantidade vendida", "Status do pedido",
             ]
             if c in df_f.columns or c == "Data_Venda_Efetiva"
