@@ -9,7 +9,7 @@ st.title("📊 Dashboard de Vendas - E-commerce")
 # 2. Conectando com o Google Sheets
 # Nota: Substitua a URL abaixo pelo link da sua planilha. 
 # Para este exemplo simples funcionar direto, a planilha precisa estar com acesso "Qualquer pessoa com o link pode ver".
-url_planilha = "COLE_A_URL_DA_SUA_PLANILHA_AQUI"
+url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?usp=sharing"
 
 # Cria a conexão e lê os dados
 conn = st.connection("gsheets", type=GSheetsConnection)
