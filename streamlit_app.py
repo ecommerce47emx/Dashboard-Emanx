@@ -1,8 +1,11 @@
 import re
+import unicodedata
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import streamlit as st
 import pandas as pd
 import altair as alt
-
 from streamlit_gsheets import GSheetsConnection
 
 # ──────────────────────────────────────────────
@@ -42,8 +45,18 @@ def formatar_brl(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def normalizar_texto(valor):
+    """Remove acentos e normaliza texto para comparação."""
+    if pd.isna(valor):
+        return ""
+    txt = str(valor).strip().upper()
+    txt = unicodedata.normalize("NFKD", txt)
+    txt = "".join(c for c in txt if not unicodedata.combining(c))
+    return txt
+
+
 def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
-    """Converte uma coluna para datetime e normaliza para data."""
+    """Converte uma coluna para datetime normalizada."""
     if coluna not in df.columns:
         return pd.Series(pd.NaT, index=df.index)
 
@@ -125,10 +138,17 @@ def build_img_url(row):
     return ""
 
 
+def primeiro_valor_nao_vazio(series):
+    """Retorna o primeiro valor não vazio de uma série."""
+    for v in series:
+        if pd.notna(v) and str(v).strip() != "":
+            return v
+    return ""
+
+
 def preparar_metricas_visao(df_base: pd.DataFrame, somente_devolucao: bool) -> pd.DataFrame:
     """
-    Quando estiver no modo devolução, exibe Receita, Líquido e Quantidade em valor absoluto
-    para facilitar a leitura do dashboard.
+    No modo devolução, usa valor absoluto para facilitar a leitura.
     """
     df_out = df_base.copy()
 
@@ -142,6 +162,105 @@ def preparar_metricas_visao(df_base: pd.DataFrame, somente_devolucao: bool) -> p
         df_out["Qtd_Visao"] = df_out["Qtd_Num"]
 
     return df_out
+
+
+def calcular_status_e_projecao(data_ini, data_fim, total_atual):
+    """
+    Calcula a projeção mensal apenas quando:
+    - o filtro está dentro de um único mês
+    - é o mês atual
+    - o mês ainda não terminou
+    - o filtro começou no dia 1
+    - o filtro cobre os dados até ontem
+    """
+    if data_ini is None or data_fim is None:
+        return {"status": "sem_periodo"}
+
+    data_ini = pd.Timestamp(data_ini).normalize()
+    data_fim = pd.Timestamp(data_fim).normalize()
+
+    if data_ini.year != data_fim.year or data_ini.month != data_fim.month:
+        return {"status": "multiplos_meses"}
+
+    inicio_mes = data_ini.replace(day=1)
+    fim_mes = inicio_mes + pd.offsets.MonthEnd(1)
+
+    hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
+    ontem_sp = hoje_sp - pd.Timedelta(days=1)
+    inicio_mes_atual = hoje_sp.replace(day=1)
+
+    mes_referencia = data_ini.replace(day=1)
+
+    if mes_referencia > inicio_mes_atual:
+        return {
+            "status": "futuro",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": fim_mes.day,
+        }
+
+    if mes_referencia < inicio_mes_atual:
+        if data_ini == inicio_mes and data_fim >= fim_mes:
+            return {
+                "status": "finalizado",
+                "inicio_mes": inicio_mes,
+                "fim_mes": fim_mes,
+                "dias_mes": fim_mes.day,
+            }
+        return {
+            "status": "intervalo_parcial",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": fim_mes.day,
+        }
+
+    if data_ini != inicio_mes:
+        return {
+            "status": "intervalo_parcial",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": fim_mes.day,
+        }
+
+    if ontem_sp >= fim_mes:
+        return {
+            "status": "finalizado",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": fim_mes.day,
+        }
+
+    if data_fim < ontem_sp:
+        return {
+            "status": "intervalo_parcial",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": fim_mes.day,
+        }
+
+    dias_passados = ontem_sp.day
+    dias_mes = fim_mes.day
+    dias_restantes = dias_mes - dias_passados
+
+    if dias_passados <= 0:
+        return {
+            "status": "sem_base",
+            "inicio_mes": inicio_mes,
+            "fim_mes": fim_mes,
+            "dias_mes": dias_mes,
+        }
+
+    projecao = (total_atual / dias_passados) * dias_mes
+
+    return {
+        "status": "em_andamento",
+        "inicio_mes": inicio_mes,
+        "fim_mes": fim_mes,
+        "dias_mes": dias_mes,
+        "dias_passados": dias_passados,
+        "dias_restantes": dias_restantes,
+        "projecao": projecao,
+    }
 
 
 # ──────────────────────────────────────────────
@@ -166,15 +285,14 @@ try:
     df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
     df["Data_Venda_Efetiva"] = data_venda_efetiva(df)
 
-    # Marca devolução
+    # Identificação de devolução pelo Grupo de Marketplace
     df["Eh_Devolucao"] = (
         df["Grupo de Marketplace"]
-        .astype("string")
-        .str.upper()
-        .str.contains("DEVOLU", na=False)
+        .apply(normalizar_texto)
+        .str.contains("DEVOLUCAO", na=False)
     )
 
-    # URL de imagem
+    # URL da imagem
     df["img_url"] = df.apply(build_img_url, axis=1)
 
     # ──────────────────────────────────────────
@@ -189,22 +307,24 @@ try:
     # ──────────────────────────────────────────
     # 7. FILTROS LATERAIS
     # ──────────────────────────────────────────
-    st.sidebar.header("🔍 Filtros")
+    st.sidebar.header("Filtros")
 
+    # Marketplace
     mkt_lista = sorted(df["Grupo de Marketplace"].dropna().unique())
     mkt_sel = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
 
+    # Marca
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
         marca_sel = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
     else:
         marca_sel = None
 
+    # Toggle devolução
     somente_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
 
-    # Filtro de período agora por Data emissao
+    # Filtro de período por Data emissao
     datas_validas = df["Data_Emissao_Filtro"].dropna()
-
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
         data_max = datas_validas.max().date()
@@ -247,15 +367,43 @@ try:
     # ──────────────────────────────────────────
     # 9. CABEÇALHO
     # ──────────────────────────────────────────
-    st.title("📊 Dashboard de Performance de Vendas")
+    st.title("Dashboard de Performance de Vendas")
 
     if somente_devolucao:
-        st.caption(f"{len(df_f):,} registros exibidos | modo devolução ativo | período filtrado por Data emissao")
+        st.caption(
+            f"{len(df_f):,} registros exibidos | modo devolução ativo | período filtrado por Data emissao"
+        )
     else:
-        st.caption(f"{len(df_f):,} pedidos exibidos após filtros aplicados | período filtrado por Data emissao")
+        st.caption(
+            f"{len(df_f):,} pedidos exibidos após filtros aplicados | período filtrado por Data emissao"
+        )
 
     # ──────────────────────────────────────────
-    # 10. MÉTRICAS PRINCIPAIS
+    # 10. CSS DAS MÉTRICAS
+    # ──────────────────────────────────────────
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMetric"] {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(128,128,128,0.18);
+            border-radius: 12px;
+            padding: 14px 16px;
+        }
+        div[data-testid="stMetricLabel"] {
+            font-size: 0.95rem;
+        }
+        div[data-testid="stMetricValue"] {
+            font-size: 1.45rem;
+            line-height: 1.15;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # ──────────────────────────────────────────
+    # 11. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
     receita_total = df_f["Receita_Visao"].sum()
     liquido_total = df_f["Liquido_Visao"].sum()
@@ -263,22 +411,52 @@ try:
     qtd_total = int(df_f["Qtd_Visao"].sum())
     total_pedidos = len(df_f)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("💰 Receita Total", formatar_brl(receita_total))
-    c2.metric("✅ Líquido Total", formatar_brl(liquido_total))
-    c3.metric("📦 Custo Médio", formatar_brl(custo_medio))
-    c4.metric("📬 Itens Vendidos", f"{qtd_total:,}")
-    c5.metric("🛒 Total de Pedidos", f"{total_pedidos:,}")
+    info_proj = calcular_status_e_projecao(
+        data_ini=data_ini,
+        data_fim=data_fim,
+        total_atual=receita_total
+    )
+
+    linha1 = st.columns(3)
+    linha2 = st.columns(3)
+
+    linha1[0].metric("Receita Total", formatar_brl(receita_total))
+    linha1[1].metric("Líquido Total", formatar_brl(liquido_total))
+    linha1[2].metric("Custo Médio", formatar_brl(custo_medio))
+
+    linha2[0].metric("Itens Vendidos", f"{qtd_total:,}")
+    linha2[1].metric("Total de Pedidos", f"{total_pedidos:,}")
+
+    if info_proj["status"] == "em_andamento":
+        linha2[2].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
+        st.caption(
+            f"Mês em andamento. {info_proj['dias_passados']} dias passados, "
+            f"{info_proj['dias_restantes']} dias restantes, total de {info_proj['dias_mes']} dias."
+        )
+    elif info_proj["status"] == "finalizado":
+        linha2[2].metric("Projeção do Mês", "Mês finalizado")
+        st.caption("O mês filtrado já foi encerrado, então não há projeção.")
+    elif info_proj["status"] == "intervalo_parcial":
+        linha2[2].metric("Projeção do Mês", "N/D")
+        st.caption("Para projetar o mês atual, o filtro precisa cobrir o mês desde o dia 1 até ontem.")
+    elif info_proj["status"] == "multiplos_meses":
+        linha2[2].metric("Projeção do Mês", "N/D")
+        st.caption("A projeção mensal funciona apenas quando o filtro está dentro de um único mês.")
+    elif info_proj["status"] == "futuro":
+        linha2[2].metric("Projeção do Mês", "N/D")
+        st.caption("O período selecionado está em um mês futuro.")
+    else:
+        linha2[2].metric("Projeção do Mês", "N/D")
 
     st.divider()
 
     # ──────────────────────────────────────────
-    # 11. GRÁFICO: VENDAS POR DIA
+    # 12. GRÁFICO: VENDAS POR DIA
     # ──────────────────────────────────────────
     if somente_devolucao:
-        st.subheader("📅 Devoluções por Dia")
+        st.subheader("Devoluções por Dia")
     else:
-        st.subheader("📅 Vendas por Dia")
+        st.subheader("Vendas por Dia")
 
     if not df_f["Data_Venda_Efetiva"].isna().all():
         df_dia = (
@@ -319,14 +497,11 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
+    # 13. GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
     if somente_devolucao:
-        st.subheader("🏪 Devoluções por Marketplace")
-    else:
-        st.subheader("🏪 Faturamento por Marketplace e Tipo de Pedido")
+        st.subheader("Devoluções por Marketplace")
 
-    if somente_devolucao:
         df_mkt = (
             df_f.groupby(["Grupo de Marketplace"])["Receita_Visao"]
             .sum()
@@ -348,6 +523,8 @@ try:
             .properties(height=320)
         )
     else:
+        st.subheader("Faturamento por Marketplace e Tipo de Pedido")
+
         df_mkt = (
             df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Visao"]
             .sum()
@@ -376,24 +553,24 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 13. RANKING DE PRODUTOS
+    # 14. RANKING DE PRODUTOS
     # ──────────────────────────────────────────
-    st.subheader("🏆 Ranking de Produtos")
+    st.subheader("Ranking de Produtos")
 
     col_produto = "Produto" if "Produto" in df_f.columns else None
 
     if col_produto:
         if somente_devolucao:
-            tab_receita, tab_qtd = st.tabs(["💰 Por Valor Devolvido", "📦 Por Quantidade Devolvida"])
+            tab_receita, tab_qtd = st.tabs(["Por Valor Devolvido", "Por Quantidade Devolvida"])
         else:
-            tab_receita, tab_qtd = st.tabs(["💰 Por Receita", "📦 Por Quantidade Vendida"])
+            tab_receita, tab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
 
         df_rank_base = (
             df_f.groupby(col_produto)
             .agg(
                 Receita=("Receita_Visao", "sum"),
                 Quantidade=("Qtd_Visao", "sum"),
-                img_url=("img_url", "first"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
             )
             .reset_index()
         )
@@ -405,8 +582,9 @@ try:
             df_top.index += 1
 
             for pos, row in df_top.iterrows():
-                cols = st.columns([0.5, 1.2, 5, 2])
-                cols[0].markdown(f"#{pos}")
+                cols = st.columns([0.6, 1.2, 5, 2])
+
+                cols[0].markdown(f"{pos}")
 
                 if row["img_url"]:
                     cols[1].image(row["img_url"], width=60)
@@ -431,9 +609,9 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 14. TABELA DETALHADA
+    # 15. TABELA DETALHADA
     # ──────────────────────────────────────────
-    with st.expander("📋 Ver Detalhamento dos Pedidos"):
+    with st.expander("Ver Detalhamento dos Pedidos"):
         df_exibir = df_f.copy()
 
         if somente_devolucao:
@@ -442,8 +620,8 @@ try:
             df_exibir["Liquido Visual"] = df_exibir["Liquido_Visao"]
 
         colunas_base = [
-            "Data_Emissao_Filtro",
-            "Data_Venda_Efetiva",
+            "Data emissao",
+            "Data da Venda",
             "Grupo de Marketplace",
             "Tipo pedido",
             "Marca",
