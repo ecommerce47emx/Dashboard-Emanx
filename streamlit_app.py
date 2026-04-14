@@ -28,7 +28,6 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # 4. HELPERS
 # ──────────────────────────────────────────────
 def limpar_moeda(valor):
-    """Converte valores monetários em float."""
     if pd.isna(valor) or str(valor).strip() in ("", "R$ -", " R$ - "):
         return 0.0
 
@@ -41,12 +40,10 @@ def limpar_moeda(valor):
 
 
 def formatar_brl(valor: float) -> str:
-    """Formata float como moeda BRL."""
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def normalizar_texto(valor):
-    """Remove acentos e normaliza texto para comparação."""
     if pd.isna(valor):
         return ""
     txt = str(valor).strip().upper()
@@ -56,29 +53,12 @@ def normalizar_texto(valor):
 
 
 def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
-    """Converte uma coluna para datetime normalizada."""
     if coluna not in df.columns:
         return pd.Series(pd.NaT, index=df.index)
-
     return pd.to_datetime(df[coluna], errors="coerce", dayfirst=True).dt.normalize()
 
 
-def data_venda_efetiva(df: pd.DataFrame) -> pd.Series:
-    """
-    Retorna a data efetiva de venda:
-    usa 'Data da Venda' quando preenchida
-    caso contrário usa 'Data emissao'
-    """
-    series_venda = parse_data_coluna(df, "Data da Venda")
-    series_emissao = parse_data_coluna(df, "Data emissao")
-    return series_venda.fillna(series_emissao)
-
-
 def normalizar_codigo(valor, tamanho_min=6):
-    """
-    Normaliza o código do produto preservando zeros à esquerda.
-    Ex.: 42333.0 vira 042333
-    """
     if pd.isna(valor):
         return ""
 
@@ -100,10 +80,6 @@ def normalizar_codigo(valor, tamanho_min=6):
 
 
 def extrair_cor3(valor):
-    """
-    Extrai o código de cor com 3 dígitos.
-    Ex.: '001 - PRETO' -> '001'
-    """
     if pd.isna(valor):
         return ""
 
@@ -121,11 +97,6 @@ def extrair_cor3(valor):
 
 
 def build_img_url(row):
-    """
-    Monta a URL da imagem do produto.
-    Formato: BASE_URL + Código + Cor(3 dígitos) + '1.jpg'
-    Exemplo: 042333 + 003 + 1.jpg -> 0423330031.jpg
-    """
     try:
         codigo = normalizar_codigo(row.get("Código", ""))
         cor3 = extrair_cor3(row.get("Cor", ""))
@@ -139,40 +110,43 @@ def build_img_url(row):
 
 
 def primeiro_valor_nao_vazio(series):
-    """Retorna o primeiro valor não vazio de uma série."""
     for v in series:
         if pd.notna(v) and str(v).strip() != "":
             return v
     return ""
 
 
-def preparar_metricas_visao(df_base: pd.DataFrame, somente_devolucao: bool) -> pd.DataFrame:
-    """
-    No modo devolução, usa valor absoluto para facilitar a leitura.
-    """
-    df_out = df_base.copy()
+def calcular_delta_percentual(atual, anterior):
+    atual = float(atual or 0)
+    anterior = float(anterior or 0)
 
-    if somente_devolucao:
-        df_out["Receita_Visao"] = df_out["Receita_Num"].abs()
-        df_out["Liquido_Visao"] = df_out["Liquido_Num"].abs()
-        df_out["Qtd_Visao"] = df_out["Qtd_Num"].abs()
-    else:
-        df_out["Receita_Visao"] = df_out["Receita_Num"]
-        df_out["Liquido_Visao"] = df_out["Liquido_Num"]
-        df_out["Qtd_Visao"] = df_out["Qtd_Num"]
+    if anterior == 0:
+        if atual == 0:
+            return "0,0%"
+        return "N/D"
 
-    return df_out
+    delta = ((atual - anterior) / abs(anterior)) * 100
+    return f"{delta:+.1f}%".replace(".", ",")
+
+
+def periodo_anterior(data_ini, data_fim):
+    dias_periodo = (data_fim - data_ini).days + 1
+    fim_anterior = data_ini - pd.Timedelta(days=1)
+    ini_anterior = fim_anterior - pd.Timedelta(days=dias_periodo - 1)
+    return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
+
+
+def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
+    if coluna_data not in df_base.columns:
+        return df_base.iloc[0:0].copy()
+
+    return df_base[
+        (df_base[coluna_data] >= ini) &
+        (df_base[coluna_data] <= fim)
+    ].copy()
 
 
 def calcular_status_e_projecao(data_ini, data_fim, total_atual):
-    """
-    Calcula a projeção mensal apenas quando:
-    - o filtro está dentro de um único mês
-    - é o mês atual
-    - o mês ainda não terminou
-    - o filtro começou no dia 1
-    - o filtro cobre os dados até ontem
-    """
     if data_ini is None or data_fim is None:
         return {"status": "sem_periodo"}
 
@@ -188,7 +162,6 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
     ontem_sp = hoje_sp - pd.Timedelta(days=1)
     inicio_mes_atual = hoje_sp.replace(day=1)
-
     mes_referencia = data_ini.replace(day=1)
 
     if mes_referencia > inicio_mes_atual:
@@ -263,6 +236,69 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     }
 
 
+def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categorias_sel, incluir_devolucao):
+    if marketplaces_sel:
+        mask_marketplace = df_base["Grupo de Marketplace"].isin(marketplaces_sel)
+    else:
+        mask_marketplace = pd.Series(False, index=df_base.index)
+
+    if incluir_devolucao:
+        mask_marketplace = mask_marketplace | df_base["Eh_Devolucao"]
+    else:
+        mask_marketplace = mask_marketplace & (~df_base["Eh_Devolucao"])
+
+    df_out = df_base[mask_marketplace].copy()
+
+    if marcas_sel is not None:
+        df_out = df_out[df_out["Marca"].isin(marcas_sel)]
+
+    if categorias_sel is not None:
+        df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
+
+    return df_out
+
+
+def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
+    data_ini = pd.Timestamp(data_ini).normalize()
+    data_fim = pd.Timestamp(data_fim).normalize()
+
+    ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
+
+    datas_atuais = pd.date_range(data_ini, data_fim, freq="D")
+    datas_anteriores = pd.date_range(ini_ant, fim_ant, freq="D")
+
+    atual = (
+        filtrar_intervalo(df_base, coluna_data, data_ini, data_fim)
+        .groupby(coluna_data)[coluna_valor]
+        .sum()
+        .reindex(datas_atuais, fill_value=0)
+        .reset_index()
+    )
+    atual.columns = ["Data_Original", "Valor"]
+    atual["Data_Comparacao"] = datas_atuais
+    atual["Serie"] = "Período Atual"
+
+    anterior = (
+        filtrar_intervalo(df_base, coluna_data, ini_ant, fim_ant)
+        .groupby(coluna_data)[coluna_valor]
+        .sum()
+        .reindex(datas_anteriores, fill_value=0)
+        .reset_index()
+    )
+    anterior.columns = ["Data_Original", "Valor"]
+    anterior["Data_Comparacao"] = datas_atuais
+    anterior["Serie"] = "Período Anterior"
+
+    df_cmp = pd.concat([atual, anterior], ignore_index=True)
+    df_cmp["Rotulo_Periodo"] = (
+        df_cmp["Serie"]
+        + " | "
+        + df_cmp["Data_Original"].dt.strftime("%d/%m/%Y")
+    )
+
+    return df_cmp, ini_ant, fim_ant, dias_periodo
+
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -270,7 +306,6 @@ try:
     df = conn.read(spreadsheet=url_planilha, ttl="0")
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Colunas monetárias
     for col_orig, col_num in [
         ("Receita", "Receita_Num"),
         ("Liquido", "Liquido_Num"),
@@ -278,26 +313,19 @@ try:
     ]:
         df[col_num] = df[col_orig].apply(limpar_moeda) if col_orig in df.columns else 0.0
 
-    # Quantidade vendida numérica
     df["Qtd_Num"] = pd.to_numeric(df.get("Quantidade vendida"), errors="coerce").fillna(0)
 
-    # Datas
     df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
-    df["Data_Venda_Efetiva"] = data_venda_efetiva(df)
+    df["Data_Venda_Grafico"] = parse_data_coluna(df, "Data da Venda")
 
-    # Identificação de devolução pelo Grupo de Marketplace
     df["Eh_Devolucao"] = (
         df["Grupo de Marketplace"]
         .apply(normalizar_texto)
         .str.contains("DEVOLUCAO", na=False)
     )
 
-    # URL da imagem
     df["img_url"] = df.apply(build_img_url, axis=1)
 
-    # ──────────────────────────────────────────
-    # 6. VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
-    # ──────────────────────────────────────────
     colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido", "Data emissao"]
     if not all(col in df.columns for col in colunas_necessarias):
         st.error("Colunas obrigatórias não encontradas. Verifique a planilha.")
@@ -305,25 +333,29 @@ try:
         st.stop()
 
     # ──────────────────────────────────────────
-    # 7. FILTROS LATERAIS
+    # 6. FILTROS LATERAIS
     # ──────────────────────────────────────────
     st.sidebar.header("Filtros")
 
-    # Marketplace
-    mkt_lista = sorted(df["Grupo de Marketplace"].dropna().unique())
+    mkt_lista = sorted(
+        df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
+    )
     mkt_sel = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
 
-    # Marca
+    incluir_devolucao = st.sidebar.toggle("Incluir Devolução", value=False)
+
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
         marca_sel = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
     else:
         marca_sel = None
 
-    # Toggle devolução
-    somente_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
+    if "Categoria" in df.columns:
+        categoria_lista = sorted(df["Categoria"].dropna().unique())
+        categoria_sel = st.sidebar.multiselect("Categoria", options=categoria_lista, default=categoria_lista)
+    else:
+        categoria_sel = None
 
-    # Filtro de período por Data emissao
     datas_validas = df["Data_Emissao_Filtro"].dropna()
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
@@ -346,40 +378,44 @@ try:
         data_ini, data_fim = None, None
 
     # ──────────────────────────────────────────
-    # 8. APLICANDO FILTROS
+    # 7. BASE FILTRADA
     # ──────────────────────────────────────────
-    df_f = df[df["Grupo de Marketplace"].isin(mkt_sel)].copy()
+    df_dim = aplicar_filtros_dimensionais(
+        df_base=df,
+        marketplaces_sel=mkt_sel,
+        marcas_sel=marca_sel,
+        categorias_sel=categoria_sel,
+        incluir_devolucao=incluir_devolucao,
+    )
 
-    if marca_sel is not None:
-        df_f = df_f[df_f["Marca"].isin(marca_sel)]
-
+    # Detalhamento principal continua filtrado por Data emissao
     if data_ini is not None and data_fim is not None:
-        df_f = df_f[
-            (df_f["Data_Emissao_Filtro"] >= data_ini) &
-            (df_f["Data_Emissao_Filtro"] <= data_fim)
-        ]
+        df_f = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
+    else:
+        df_f = df_dim.copy()
 
-    if somente_devolucao:
-        df_f = df_f[df_f["Eh_Devolucao"]].copy()
-
-    df_f = preparar_metricas_visao(df_f, somente_devolucao)
+    # Resumo e comparativo usam Data da Venda
+    if data_ini is not None and data_fim is not None:
+        df_resumo_atual = filtrar_intervalo(df_dim, "Data_Venda_Grafico", data_ini, data_fim)
+        ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
+        df_resumo_anterior = filtrar_intervalo(df_dim, "Data_Venda_Grafico", ini_ant, fim_ant)
+    else:
+        df_resumo_atual = df_dim.iloc[0:0].copy()
+        df_resumo_anterior = df_dim.iloc[0:0].copy()
+        ini_ant = fim_ant = None
+        dias_periodo = 0
 
     # ──────────────────────────────────────────
-    # 9. CABEÇALHO
+    # 8. CABEÇALHO
     # ──────────────────────────────────────────
     st.title("Dashboard de Performance de Vendas")
-
-    if somente_devolucao:
-        st.caption(
-            f"{len(df_f):,} registros exibidos | modo devolução ativo | período filtrado por Data emissao"
-        )
-    else:
-        st.caption(
-            f"{len(df_f):,} pedidos exibidos após filtros aplicados | período filtrado por Data emissao"
-        )
+    st.caption(
+        f"{len(df_f):,} linhas no detalhamento filtradas por Data emissao | "
+        f"Resumo e gráfico comparativo calculados por Data da Venda"
+    )
 
     # ──────────────────────────────────────────
-    # 10. CSS DAS MÉTRICAS
+    # 9. CSS DAS MÉTRICAS
     # ──────────────────────────────────────────
     st.markdown(
         """
@@ -403,13 +439,19 @@ try:
     )
 
     # ──────────────────────────────────────────
-    # 11. MÉTRICAS PRINCIPAIS
+    # 10. MÉTRICAS PRINCIPAIS COM COMPARATIVO
     # ──────────────────────────────────────────
-    receita_total = df_f["Receita_Visao"].sum()
-    liquido_total = df_f["Liquido_Visao"].sum()
-    custo_medio = df_f["Custo_Num"].mean() if len(df_f) > 0 else 0.0
-    qtd_total = int(df_f["Qtd_Visao"].sum())
-    total_pedidos = len(df_f)
+    receita_total = df_resumo_atual["Receita_Num"].sum()
+    liquido_total = df_resumo_atual["Liquido_Num"].sum()
+    custo_medio = df_resumo_atual["Custo_Num"].mean() if len(df_resumo_atual) > 0 else 0.0
+    qtd_total = int(df_resumo_atual["Qtd_Num"].sum())
+    total_pedidos = len(df_resumo_atual)
+
+    receita_anterior = df_resumo_anterior["Receita_Num"].sum()
+    liquido_anterior = df_resumo_anterior["Liquido_Num"].sum()
+    custo_anterior = df_resumo_anterior["Custo_Num"].mean() if len(df_resumo_anterior) > 0 else 0.0
+    qtd_anterior = int(df_resumo_anterior["Qtd_Num"].sum())
+    pedidos_anterior = len(df_resumo_anterior)
 
     info_proj = calcular_status_e_projecao(
         data_ini=data_ini,
@@ -420,25 +462,51 @@ try:
     linha1 = st.columns(3)
     linha2 = st.columns(3)
 
-    linha1[0].metric("Receita Total", formatar_brl(receita_total))
-    linha1[1].metric("Líquido Total", formatar_brl(liquido_total))
-    linha1[2].metric("Custo Médio", formatar_brl(custo_medio))
+    linha1[0].metric(
+        "Receita Total",
+        formatar_brl(receita_total),
+        calcular_delta_percentual(receita_total, receita_anterior)
+    )
+    linha1[1].metric(
+        "Líquido Total",
+        formatar_brl(liquido_total),
+        calcular_delta_percentual(liquido_total, liquido_anterior)
+    )
+    linha1[2].metric(
+        "Custo Médio",
+        formatar_brl(custo_medio),
+        calcular_delta_percentual(custo_medio, custo_anterior)
+    )
 
-    linha2[0].metric("Itens Vendidos", f"{qtd_total:,}")
-    linha2[1].metric("Total de Pedidos", f"{total_pedidos:,}")
+    linha2[0].metric(
+        "Itens Vendidos",
+        f"{qtd_total:,}",
+        calcular_delta_percentual(qtd_total, qtd_anterior)
+    )
+    linha2[1].metric(
+        "Total de Pedidos",
+        f"{total_pedidos:,}",
+        calcular_delta_percentual(total_pedidos, pedidos_anterior)
+    )
 
     if info_proj["status"] == "em_andamento":
         linha2[2].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
         st.caption(
-            f"Mês em andamento. {info_proj['dias_passados']} dias passados, "
-            f"{info_proj['dias_restantes']} dias restantes, total de {info_proj['dias_mes']} dias."
+            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
+            f"Projeção mensal: {info_proj['dias_passados']} dias passados, "
+            f"{info_proj['dias_restantes']} restantes, total de {info_proj['dias_mes']} dias."
         )
     elif info_proj["status"] == "finalizado":
         linha2[2].metric("Projeção do Mês", "Mês finalizado")
-        st.caption("O mês filtrado já foi encerrado, então não há projeção.")
+        st.caption(
+            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+        )
     elif info_proj["status"] == "intervalo_parcial":
         linha2[2].metric("Projeção do Mês", "N/D")
-        st.caption("Para projetar o mês atual, o filtro precisa cobrir o mês desde o dia 1 até ontem.")
+        st.caption(
+            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
+            f"Para projetar o mês atual, o filtro precisa cobrir o mês desde o dia 1 até ontem."
+        )
     elif info_proj["status"] == "multiplos_meses":
         linha2[2].metric("Projeção do Mês", "N/D")
         st.caption("A projeção mensal funciona apenas quando o filtro está dentro de um único mês.")
@@ -451,85 +519,59 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 12. GRÁFICO: VENDAS POR DIA
+    # 11. GRÁFICO: VENDAS POR DIA COM PERÍODO ANTERIOR
     # ──────────────────────────────────────────
-    if somente_devolucao:
-        st.subheader("Devoluções por Dia")
-    else:
-        st.subheader("Vendas por Dia")
+    st.subheader("Vendas por Dia com Comparativo do Período Anterior")
 
-    if not df_f["Data_Venda_Efetiva"].isna().all():
-        df_dia = (
-            df_f.groupby(df_f["Data_Venda_Efetiva"].dt.date)["Receita_Visao"]
-            .sum()
-            .reset_index()
-            .rename(columns={"Data_Venda_Efetiva": "Data", "Receita_Visao": "Receita"})
+    if (
+        data_ini is not None and
+        data_fim is not None and
+        "Data_Venda_Grafico" in df_dim.columns and
+        not df_dim["Data_Venda_Grafico"].dropna().empty
+    ):
+        df_cmp, ini_ant_chart, fim_ant_chart, dias_periodo_chart = montar_df_comparativo(
+            df_base=df_dim,
+            coluna_data="Data_Venda_Grafico",
+            coluna_valor="Receita_Num",
+            data_ini=data_ini,
+            data_fim=data_fim,
         )
-        df_dia["Data"] = pd.to_datetime(df_dia["Data"])
 
-        chart_linha = (
-            alt.Chart(df_dia)
-            .mark_area(
-                line={"color": "#4F8BFF"},
-                color=alt.Gradient(
-                    gradient="linear",
-                    stops=[
-                        alt.GradientStop(color="#4F8BFF", offset=1),
-                        alt.GradientStop(color="rgba(79,139,255,0.05)", offset=0),
-                    ],
-                    x1=1, x2=1, y1=1, y2=0,
-                ),
-            )
-            .encode(
-                x=alt.X("Data:T", title="Data"),
-                y=alt.Y("Receita:Q", title="Valor (R$)"),
-                tooltip=[
-                    alt.Tooltip("Data:T", title="Data", format="%d/%m/%Y"),
-                    alt.Tooltip("Receita:Q", title="Valor", format=",.2f"),
-                ],
-            )
-            .properties(height=280)
+        base = alt.Chart(df_cmp).encode(
+            x=alt.X("Data_Comparacao:T", title="Posição no período"),
+            y=alt.Y("Valor:Q", title="Receita (R$)"),
+            color=alt.Color("Serie:N", title="Série"),
+            tooltip=[
+                alt.Tooltip("Serie:N", title="Série"),
+                alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
+                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+            ],
         )
-        st.altair_chart(chart_linha, use_container_width=True)
+
+        linhas = base.mark_line(point=True, strokeWidth=3)
+        st.altair_chart(linhas.properties(height=320), use_container_width=True)
+
+        st.caption(
+            f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
+            f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
+            f"Comparação alinhada pela posição dentro do período"
+        )
     else:
-        st.info("Sem dados de data disponíveis para o período selecionado.")
+        st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
 
     st.divider()
 
     # ──────────────────────────────────────────
-    # 13. GRÁFICO: MARKETPLACE × TIPO PEDIDO
+    # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
-    if somente_devolucao:
-        st.subheader("Devoluções por Marketplace")
+    st.subheader("Faturamento por Marketplace e Tipo de Pedido")
 
+    if not df_f.empty:
         df_mkt = (
-            df_f.groupby(["Grupo de Marketplace"])["Receita_Visao"]
+            df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
             .sum()
             .reset_index()
-            .rename(columns={"Receita_Visao": "Receita"})
-        )
-
-        chart_bar = (
-            alt.Chart(df_mkt)
-            .mark_bar()
-            .encode(
-                x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
-                y=alt.Y("Receita:Q", title="Valor (R$)"),
-                tooltip=[
-                    "Grupo de Marketplace:N",
-                    alt.Tooltip("Receita:Q", format=",.2f"),
-                ],
-            )
-            .properties(height=320)
-        )
-    else:
-        st.subheader("Faturamento por Marketplace e Tipo de Pedido")
-
-        df_mkt = (
-            df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Visao"]
-            .sum()
-            .reset_index()
-            .rename(columns={"Receita_Visao": "Receita"})
+            .rename(columns={"Receita_Num": "Receita"})
         )
 
         chart_bar = (
@@ -547,29 +589,27 @@ try:
             )
             .properties(height=320)
         )
-
-    st.altair_chart(chart_bar, use_container_width=True)
+        st.altair_chart(chart_bar, use_container_width=True)
+    else:
+        st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
     st.divider()
 
     # ──────────────────────────────────────────
-    # 14. RANKING DE PRODUTOS
+    # 13. RANKING DE PRODUTOS
     # ──────────────────────────────────────────
     st.subheader("Ranking de Produtos")
 
     col_produto = "Produto" if "Produto" in df_f.columns else None
 
-    if col_produto:
-        if somente_devolucao:
-            tab_receita, tab_qtd = st.tabs(["Por Valor Devolvido", "Por Quantidade Devolvida"])
-        else:
-            tab_receita, tab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
+    if col_produto and not df_f.empty:
+        tab_receita, tab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
 
         df_rank_base = (
             df_f.groupby(col_produto)
             .agg(
-                Receita=("Receita_Visao", "sum"),
-                Quantidade=("Qtd_Visao", "sum"),
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
                 img_url=("img_url", primeiro_valor_nao_vazio),
             )
             .reset_index()
@@ -584,7 +624,7 @@ try:
             for pos, row in df_top.iterrows():
                 cols = st.columns([0.6, 1.2, 5, 2])
 
-                cols[0].markdown(f"{pos}")
+                cols[0].markdown(str(pos))
 
                 if row["img_url"]:
                     cols[1].image(row["img_url"], width=60)
@@ -604,26 +644,20 @@ try:
             render_ranking(df_rank_base, "Quantidade")
 
     else:
-        st.info("Coluna 'Produto' não encontrada na planilha.")
+        st.info("Sem dados de produtos para montar o ranking.")
 
     st.divider()
 
     # ──────────────────────────────────────────
-    # 15. TABELA DETALHADA
+    # 14. TABELA DETALHADA
     # ──────────────────────────────────────────
     with st.expander("Ver Detalhamento dos Pedidos"):
-        df_exibir = df_f.copy()
-
-        if somente_devolucao:
-            df_exibir["Receita Visual"] = df_exibir["Receita_Visao"]
-            df_exibir["Quantidade Visual"] = df_exibir["Qtd_Visao"]
-            df_exibir["Liquido Visual"] = df_exibir["Liquido_Visao"]
-
         colunas_base = [
             "Data emissao",
             "Data da Venda",
             "Grupo de Marketplace",
             "Tipo pedido",
+            "Categoria",
             "Marca",
             "Produto",
             "Receita",
@@ -633,12 +667,8 @@ try:
             "Status do pedido",
         ]
 
-        if somente_devolucao:
-            colunas_base.extend(["Receita Visual", "Quantidade Visual", "Liquido Visual"])
-
-        colunas_exibir = [c for c in colunas_base if c in df_exibir.columns]
-
-        st.dataframe(df_exibir[colunas_exibir], use_container_width=True)
+        colunas_exibir = [c for c in colunas_base if c in df_f.columns]
+        st.dataframe(df_f[colunas_exibir], use_container_width=True)
 
 except Exception as e:
     st.error(f"Não foi possível carregar os dados: {e}")
