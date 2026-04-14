@@ -54,40 +54,67 @@ def normalizar_texto(valor):
 
 def parse_data_serie(series: pd.Series) -> pd.Series:
     """
-    Faz parse robusto de datas:
-    tenta dayfirst=True,
-    depois dayfirst=False,
-    depois tenta serial Excel.
+    Parse robusto para datas brasileiras.
+    Prioriza formatos explícitos antes de cair no parser genérico.
     """
     if series is None:
         return pd.Series(dtype="datetime64[ns]")
 
-    s = series.copy()
+    raw = series.astype("string").str.strip()
+    parsed = pd.Series(pd.NaT, index=series.index)
 
-    parsed = pd.to_datetime(s, errors="coerce", dayfirst=True)
+    formatos = [
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%d-%m-%Y",
+        "%d-%m-%Y %H:%M:%S",
+        "%d-%m-%Y %H:%M",
+    ]
 
-    faltando = parsed.isna()
+    faltando = raw.notna() & (raw != "")
+
+    for fmt in formatos:
+        if not faltando.any():
+            break
+        tentativa = pd.to_datetime(raw[faltando], format=fmt, errors="coerce")
+        ok = tentativa.notna()
+        if ok.any():
+            parsed.loc[tentativa[ok].index] = tentativa[ok]
+        faltando = parsed.isna() & raw.notna() & (raw != "")
+
     if faltando.any():
-        parsed2 = pd.to_datetime(s[faltando], errors="coerce", dayfirst=False)
-        parsed.loc[faltando] = parsed2
+        raw_limpo = (
+            raw[faltando]
+            .str.replace("T", " ", regex=False)
+            .str.replace("Z", "", regex=False)
+            .str.replace(r"\.\d+$", "", regex=True)
+        )
+        tentativa = pd.to_datetime(raw_limpo, errors="coerce", dayfirst=True)
+        ok = tentativa.notna()
+        if ok.any():
+            parsed.loc[tentativa[ok].index] = tentativa[ok]
 
-    faltando = parsed.isna()
+    faltando = parsed.isna() & raw.notna() & (raw != "")
     if faltando.any():
         numericos = pd.to_numeric(
-            s[faltando].astype(str).str.replace(",", ".", regex=False),
+            raw[faltando].str.replace(",", ".", regex=False),
             errors="coerce"
         )
-        ok_num = numericos.notna()
-        if ok_num.any():
+        ok = numericos.notna()
+        if ok.any():
             datas_excel = pd.to_datetime(
-                numericos[ok_num],
+                numericos[ok],
                 unit="D",
                 origin="1899-12-30",
                 errors="coerce"
             )
             parsed.loc[datas_excel.index] = datas_excel
 
-    return pd.Series(parsed, index=series.index).dt.normalize()
+    return pd.to_datetime(parsed, errors="coerce").dt.normalize()
 
 
 def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
@@ -154,17 +181,57 @@ def primeiro_valor_nao_vazio(series):
     return ""
 
 
-def calcular_delta_percentual(atual, anterior):
+def obter_delta_info(atual, anterior):
     atual = float(atual or 0)
     anterior = float(anterior or 0)
 
     if anterior == 0:
         if atual == 0:
-            return "0,0%"
-        return "Novo"
+            return "0,0%", "neutral"
+        return "Novo", "up"
 
     delta = ((atual - anterior) / abs(anterior)) * 100
-    return f"{delta:+.1f}%".replace(".", ",")
+
+    if delta > 0:
+        classe = "up"
+    elif delta < 0:
+        classe = "down"
+    else:
+        classe = "neutral"
+
+    return f"{delta:+.1f}%".replace(".", ","), classe
+
+
+def calcular_delta_percentual(atual, anterior):
+    texto, _ = obter_delta_info(atual, anterior)
+    return texto
+
+
+def formatar_chip_delta(atual, anterior):
+    texto, classe = obter_delta_info(atual, anterior)
+    mapa = {
+        "up": "#15803d",
+        "down": "#dc2626",
+        "neutral": "#475569",
+    }
+    fundo = {
+        "up": "rgba(34,197,94,0.12)",
+        "down": "rgba(239,68,68,0.12)",
+        "neutral": "rgba(100,116,139,0.12)",
+    }
+    return f"""
+    <span style="
+        display:inline-block;
+        padding:4px 10px;
+        border-radius:999px;
+        font-size:0.85rem;
+        color:{mapa[classe]};
+        background:{fundo[classe]};
+        white-space:nowrap;
+    ">
+        {texto}
+    </span>
+    """
 
 
 def periodo_anterior(data_ini, data_fim):
@@ -192,14 +259,6 @@ def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.D
 
 
 def calcular_status_e_projecao(data_ini, data_fim, total_atual):
-    """
-    Projeção mensal usando o período filtrado por Data emissao.
-    Só projeta quando:
-    - está em um único mês
-    - é o mês atual
-    - o filtro começou no dia 1
-    - o filtro cobre até ontem
-    """
     if data_ini is None or data_fim is None:
         return {"status": "sem_periodo"}
 
@@ -214,7 +273,6 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
 
     inicio_mes_filtro = data_ini.replace(day=1)
     fim_mes_filtro = inicio_mes_filtro + pd.offsets.MonthEnd(1)
-
     inicio_mes_atual = hoje_sp.replace(day=1)
 
     if inicio_mes_filtro < inicio_mes_atual:
@@ -270,21 +328,19 @@ def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categori
 
 
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
-    """
-    Monta comparativo alinhado por posição do dia dentro do período,
-    e não por data absoluta do calendário.
-    """
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
 
     ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
 
+    base_valida = df_base[df_base[coluna_data].notna()].copy()
+
     datas_atuais = pd.date_range(data_ini, data_fim, freq="D")
     datas_anteriores = pd.date_range(ini_ant, fim_ant, freq="D")
 
     atual = (
-        filtrar_intervalo(df_base, coluna_data, data_ini, data_fim)
-        .groupby(coluna_data)[coluna_valor]
+        filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
+        .groupby(coluna_data, as_index=True)[coluna_valor]
         .sum()
         .reindex(datas_atuais, fill_value=0)
         .reset_index()
@@ -294,8 +350,8 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
     atual["Serie"] = "Período Atual"
 
     anterior = (
-        filtrar_intervalo(df_base, coluna_data, ini_ant, fim_ant)
-        .groupby(coluna_data)[coluna_valor]
+        filtrar_intervalo(base_valida, coluna_data, ini_ant, fim_ant)
+        .groupby(coluna_data, as_index=True)[coluna_valor]
         .sum()
         .reindex(datas_anteriores, fill_value=0)
         .reset_index()
@@ -326,21 +382,18 @@ try:
 
     df["Qtd_Num"] = pd.to_numeric(df.get("Quantidade vendida"), errors="coerce").fillna(0)
 
-    # Datas principais
     df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
     df["Data_Venda_Pura"] = parse_data_coluna(df, "Data da Venda")
 
-    # Para gráfico/comparativo: usa Data da Venda, com fallback para Data emissao
+    # Para gráfico comparativo
     df["Data_Venda_Analise"] = df["Data_Venda_Pura"].fillna(df["Data_Emissao_Filtro"])
 
-    # Identificação de devolução
     df["Eh_Devolucao"] = (
         df["Grupo de Marketplace"]
         .apply(normalizar_texto)
         .str.contains("DEVOLUCAO", na=False)
     )
 
-    # URL de imagem
     df["img_url"] = df.apply(build_img_url, axis=1)
 
     colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido", "Data emissao"]
@@ -417,7 +470,7 @@ try:
         incluir_devolucao=incluir_devolucao,
     )
 
-    # Base principal: Data emissao
+    # Resumo, projeção, ranking e detalhamento por Data emissao
     if data_ini is not None and data_fim is not None:
         df_f = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
         ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
@@ -427,6 +480,12 @@ try:
         df_prev = df_dim.iloc[0:0].copy()
         ini_ant = fim_ant = None
         dias_periodo = 0
+
+    # Base exclusiva do gráfico por Data da Venda
+    if data_ini is not None and data_fim is not None:
+        df_grafico_base = df_dim.copy()
+    else:
+        df_grafico_base = df_dim.iloc[0:0].copy()
 
     # ──────────────────────────────────────────
     # 8. CABEÇALHO
@@ -438,7 +497,7 @@ try:
     )
 
     # ──────────────────────────────────────────
-    # 9. CSS DAS MÉTRICAS
+    # 9. CSS
     # ──────────────────────────────────────────
     st.markdown(
         """
@@ -549,11 +608,12 @@ try:
     if (
         data_ini is not None and
         data_fim is not None and
-        "Data_Venda_Analise" in df_dim.columns and
-        not df_dim["Data_Venda_Analise"].dropna().empty
+        not df_grafico_base.empty and
+        "Data_Venda_Analise" in df_grafico_base.columns and
+        df_grafico_base["Data_Venda_Analise"].notna().any()
     ):
         df_cmp, ini_ant_chart, fim_ant_chart, dias_periodo_chart = montar_df_comparativo(
-            df_base=df_dim,
+            df_base=df_grafico_base,
             coluna_data="Data_Venda_Analise",
             coluna_valor="Receita_Num",
             data_ini=data_ini,
@@ -624,7 +684,7 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 13. RANKING DE PRODUTOS
+    # 13. RANKING DE PRODUTOS COM KPI DE PERÍODO
     # ──────────────────────────────────────────
     st.subheader("Ranking de Produtos")
 
@@ -633,7 +693,7 @@ try:
     if col_produto and not df_f.empty:
         tab_receita, tab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
 
-        df_rank_base = (
+        df_rank_atual = (
             df_f.groupby(col_produto)
             .agg(
                 Receita=("Receita_Num", "sum"),
@@ -643,14 +703,32 @@ try:
             .reset_index()
         )
 
+        df_rank_anterior = (
+            df_prev.groupby(col_produto)
+            .agg(
+                Receita_Anterior=("Receita_Num", "sum"),
+                Quantidade_Anterior=("Qtd_Num", "sum"),
+            )
+            .reset_index()
+        )
+
+        df_rank_base = df_rank_atual.merge(
+            df_rank_anterior,
+            on=col_produto,
+            how="left"
+        )
+
+        df_rank_base["Receita_Anterior"] = df_rank_base["Receita_Anterior"].fillna(0)
+        df_rank_base["Quantidade_Anterior"] = df_rank_base["Quantidade_Anterior"].fillna(0)
+
         TOP_N = st.slider("Número de produtos no ranking", 5, 30, 10, key="top_n")
 
-        def render_ranking(df_rank: pd.DataFrame, col_valor: str, fmt_fn=None):
+        def render_ranking(df_rank: pd.DataFrame, col_valor: str, col_anterior: str, fmt_fn=None):
             df_top = df_rank.nlargest(TOP_N, col_valor).reset_index(drop=True)
             df_top.index += 1
 
             for pos, row in df_top.iterrows():
-                cols = st.columns([0.6, 1.2, 5, 2])
+                cols = st.columns([0.7, 1.3, 6, 2.4])
 
                 cols[0].markdown(str(pos))
 
@@ -662,14 +740,37 @@ try:
                 cols[2].markdown(str(row[col_produto]))
 
                 valor = row[col_valor]
+                valor_ant = row[col_anterior]
                 texto = fmt_fn(valor) if fmt_fn else f"{int(valor):,}"
-                cols[3].markdown(texto)
+                chip = formatar_chip_delta(valor, valor_ant)
+
+                cols[3].markdown(
+                    f"""
+                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
+                        <div style="font-size:1.05rem;">{texto}</div>
+                        <div>{chip}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
         with tab_receita:
-            render_ranking(df_rank_base, "Receita", formatar_brl)
+            st.caption(
+                f"Comparação de receita contra o período anterior: "
+                f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+                if ini_ant is not None and fim_ant is not None else
+                "Comparação de receita contra o período anterior"
+            )
+            render_ranking(df_rank_base, "Receita", "Receita_Anterior", formatar_brl)
 
         with tab_qtd:
-            render_ranking(df_rank_base, "Quantidade")
+            st.caption(
+                f"Comparação de quantidade contra o período anterior: "
+                f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+                if ini_ant is not None and fim_ant is not None else
+                "Comparação de quantidade contra o período anterior"
+            )
+            render_ranking(df_rank_base, "Quantidade", "Quantidade_Anterior")
 
     else:
         st.info("Sem dados de produtos para montar o ranking.")
