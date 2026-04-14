@@ -2,6 +2,7 @@ import re
 import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import html
 
 import streamlit as st
 import pandas as pd
@@ -27,6 +28,217 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # ──────────────────────────────────────────────
 # 4. HELPERS
 # ──────────────────────────────────────────────
+def formatar_int(valor):
+    try:
+        return f"{int(round(valor)):,}".replace(",", ".")
+    except Exception:
+        return "0"
+
+
+def montar_ranking_produto(df_atual, df_anterior):
+    if "Produto" not in df_atual.columns or df_atual.empty:
+        return pd.DataFrame()
+
+    base_atual = df_atual[
+        df_atual["Produto"].notna() &
+        (df_atual["Produto"].astype(str).str.strip() != "")
+    ].copy()
+
+    base_anterior = df_anterior[
+        df_anterior["Produto"].notna() &
+        (df_anterior["Produto"].astype(str).str.strip() != "")
+    ].copy()
+
+    rank_atual = (
+        base_atual.groupby("Produto", as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+            img_url=("img_url", primeiro_valor_nao_vazio),
+        )
+    )
+
+    rank_anterior = (
+        base_anterior.groupby("Produto", as_index=False)
+        .agg(
+            Receita_Anterior=("Receita_Num", "sum"),
+            Quantidade_Anterior=("Qtd_Num", "sum"),
+        )
+    )
+
+    df_rank = rank_atual.merge(rank_anterior, on="Produto", how="left")
+    df_rank["Receita_Anterior"] = df_rank["Receita_Anterior"].fillna(0)
+    df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
+
+    return df_rank
+
+
+def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
+    if campo_grupo not in df_atual.columns or df_atual.empty:
+        return pd.DataFrame()
+
+    base_atual = df_atual[
+        df_atual[campo_grupo].notna() &
+        (df_atual[campo_grupo].astype(str).str.strip() != "")
+    ].copy()
+
+    base_anterior = df_anterior[
+        df_anterior[campo_grupo].notna() &
+        (df_anterior[campo_grupo].astype(str).str.strip() != "")
+    ].copy()
+
+    if base_atual.empty:
+        return pd.DataFrame()
+
+    rank_atual = (
+        base_atual.groupby(campo_grupo, as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+        )
+    )
+
+    rank_anterior = (
+        base_anterior.groupby(campo_grupo, as_index=False)
+        .agg(
+            Receita_Anterior=("Receita_Num", "sum"),
+            Quantidade_Anterior=("Qtd_Num", "sum"),
+        )
+    )
+
+    df_rank = rank_atual.merge(rank_anterior, on=campo_grupo, how="left")
+    df_rank["Receita_Anterior"] = df_rank["Receita_Anterior"].fillna(0)
+    df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
+
+    if "Produto" in base_atual.columns:
+        destaque = (
+            base_atual.groupby([campo_grupo, "Produto"], as_index=False)
+            .agg(
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
+            )
+            .sort_values(
+                by=[campo_grupo, metrica_ordenacao, "Receita", "Quantidade"],
+                ascending=[True, False, False, False]
+            )
+            .drop_duplicates(subset=[campo_grupo], keep="first")
+            .rename(
+                columns={
+                    "Produto": "Produto_Destaque",
+                    "img_url": "img_url_destaque",
+                }
+            )[[campo_grupo, "Produto_Destaque", "img_url_destaque"]]
+        )
+
+        df_rank = df_rank.merge(destaque, on=campo_grupo, how="left")
+    else:
+        df_rank["Produto_Destaque"] = ""
+        df_rank["img_url_destaque"] = ""
+
+    return df_rank
+
+
+def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
+    if df_rank.empty:
+        st.info("Sem dados para montar este ranking.")
+        return
+
+    coluna_anterior = "Receita_Anterior" if metrica_ordenacao == "Receita" else "Quantidade_Anterior"
+
+    df_top = (
+        df_rank.sort_values(
+            by=[metrica_ordenacao, "Receita", "Quantidade"],
+            ascending=[False, False, False]
+        )
+        .head(top_n)
+        .reset_index(drop=True)
+    )
+
+    for i, row in df_top.iterrows():
+        pos = i + 1
+        produto = html.escape(str(row["Produto"]))
+        chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
+
+        cols = st.columns([0.7, 1.3, 6.0, 2.7])
+
+        cols[0].markdown(str(pos))
+
+        if row.get("img_url"):
+            cols[1].image(row["img_url"], width=60)
+        else:
+            cols[1].markdown("—")
+
+        cols[2].markdown(produto)
+
+        cols[3].markdown(
+            f"""
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                <div>Receita: {formatar_brl(row["Receita"])}</div>
+                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                <div>{chip}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
+    if df_rank.empty:
+        st.info("Sem dados para montar este ranking.")
+        return
+
+    coluna_anterior = "Receita_Anterior" if metrica_ordenacao == "Receita" else "Quantidade_Anterior"
+
+    df_top = (
+        df_rank.sort_values(
+            by=[metrica_ordenacao, "Receita", "Quantidade"],
+            ascending=[False, False, False]
+        )
+        .head(top_n)
+        .reset_index(drop=True)
+    )
+
+    for i, row in df_top.iterrows():
+        pos = i + 1
+        nome_grupo = html.escape(str(row[campo_grupo]))
+        produto_destaque = html.escape(str(row.get("Produto_Destaque", "") or ""))
+        chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
+
+        cols = st.columns([0.7, 1.3, 6.0, 2.9])
+
+        cols[0].markdown(str(pos))
+
+        if row.get("img_url_destaque"):
+            cols[1].image(row["img_url_destaque"], width=60)
+        else:
+            cols[1].markdown("—")
+
+        if produto_destaque:
+            cols[2].markdown(
+                f"""
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                    <div style="font-size:1.08rem;">{nome_grupo}</div>
+                    <div style="font-size:0.9rem; color:#64748b;">
+                        Produto destaque: {produto_destaque}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            cols[2].markdown(nome_grupo)
+
+        cols[3].markdown(
+            f"""
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                <div>Receita: {formatar_brl(row["Receita"])}</div>
+                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                <div>{chip}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 def limpar_moeda(valor):
     if pd.isna(valor) or str(valor).strip() in ("", "R$ -", " R$ - "):
         return 0.0
@@ -683,98 +895,71 @@ try:
 
     st.divider()
 
+        # ──────────────────────────────────────────
+    # 13. RANKINGS
     # ──────────────────────────────────────────
-    # 13. RANKING DE PRODUTOS COM KPI DE PERÍODO
-    # ──────────────────────────────────────────
-    st.subheader("Ranking de Produtos")
+    st.subheader("Rankings")
 
-    col_produto = "Produto" if "Produto" in df_f.columns else None
+    abas_ranking = [
+        ("Produtos", "Produto"),
+        ("Categorias", "Categoria"),
+        ("Marcas", "Marca"),
+    ]
 
-    if col_produto and not df_f.empty:
-        tab_receita, tab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
+    if "Fornecedor" in df_f.columns:
+        abas_ranking.append(("Fornecedores", "Fornecedor"))
 
-        df_rank_atual = (
-            df_f.groupby(col_produto)
-            .agg(
-                Receita=("Receita_Num", "sum"),
-                Quantidade=("Qtd_Num", "sum"),
-                img_url=("img_url", primeiro_valor_nao_vazio),
+    tabs_principais = st.tabs([titulo for titulo, _ in abas_ranking])
+
+    for (titulo_aba, campo), tab_principal in zip(abas_ranking, tabs_principais):
+        with tab_principal:
+            if campo not in df_f.columns:
+                st.info(f"Coluna '{campo}' não encontrada.")
+                continue
+
+            top_n = st.slider(
+                "Número de itens no ranking",
+                5,
+                30,
+                10,
+                key=f"top_n_{campo}"
             )
-            .reset_index()
-        )
 
-        df_rank_anterior = (
-            df_prev.groupby(col_produto)
-            .agg(
-                Receita_Anterior=("Receita_Num", "sum"),
-                Quantidade_Anterior=("Qtd_Num", "sum"),
-            )
-            .reset_index()
-        )
+            subtab_receita, subtab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
 
-        df_rank_base = df_rank_atual.merge(
-            df_rank_anterior,
-            on=col_produto,
-            how="left"
-        )
-
-        df_rank_base["Receita_Anterior"] = df_rank_base["Receita_Anterior"].fillna(0)
-        df_rank_base["Quantidade_Anterior"] = df_rank_base["Quantidade_Anterior"].fillna(0)
-
-        TOP_N = st.slider("Número de produtos no ranking", 5, 30, 10, key="top_n")
-
-        def render_ranking(df_rank: pd.DataFrame, col_valor: str, col_anterior: str, fmt_fn=None):
-            df_top = df_rank.nlargest(TOP_N, col_valor).reset_index(drop=True)
-            df_top.index += 1
-
-            for pos, row in df_top.iterrows():
-                cols = st.columns([0.7, 1.3, 6, 2.4])
-
-                cols[0].markdown(str(pos))
-
-                if row["img_url"]:
-                    cols[1].image(row["img_url"], width=60)
+            with subtab_receita:
+                if campo == "Produto":
+                    df_rank = montar_ranking_produto(df_f, df_prev)
+                    st.caption(
+                        f"Comparação por receita contra o período anterior: "
+                        f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+                        if ini_ant is not None and fim_ant is not None else
+                        "Comparação por receita contra o período anterior"
+                    )
+                    render_ranking_produto(df_rank, "Receita", top_n)
                 else:
-                    cols[1].markdown("—")
+                    df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Receita")
+                    st.caption(
+                        f"A imagem exibida é do produto com maior receita dentro de cada {campo.lower()}."
+                    )
+                    render_ranking_grupo(df_rank, campo, "Receita", top_n)
 
-                cols[2].markdown(str(row[col_produto]))
-
-                valor = row[col_valor]
-                valor_ant = row[col_anterior]
-                texto = fmt_fn(valor) if fmt_fn else f"{int(valor):,}"
-                chip = formatar_chip_delta(valor, valor_ant)
-
-                cols[3].markdown(
-                    f"""
-                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-start;">
-                        <div style="font-size:1.05rem;">{texto}</div>
-                        <div>{chip}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        with tab_receita:
-            st.caption(
-                f"Comparação de receita contra o período anterior: "
-                f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
-                if ini_ant is not None and fim_ant is not None else
-                "Comparação de receita contra o período anterior"
-            )
-            render_ranking(df_rank_base, "Receita", "Receita_Anterior", formatar_brl)
-
-        with tab_qtd:
-            st.caption(
-                f"Comparação de quantidade contra o período anterior: "
-                f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
-                if ini_ant is not None and fim_ant is not None else
-                "Comparação de quantidade contra o período anterior"
-            )
-            render_ranking(df_rank_base, "Quantidade", "Quantidade_Anterior")
-
-    else:
-        st.info("Sem dados de produtos para montar o ranking.")
-
+            with subtab_qtd:
+                if campo == "Produto":
+                    df_rank = montar_ranking_produto(df_f, df_prev)
+                    st.caption(
+                        f"Comparação por quantidade contra o período anterior: "
+                        f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+                        if ini_ant is not None and fim_ant is not None else
+                        "Comparação por quantidade contra o período anterior"
+                    )
+                    render_ranking_produto(df_rank, "Quantidade", top_n)
+                else:
+                    df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Quantidade")
+                    st.caption(
+                        f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}."
+                    )
+                    render_ranking_grupo(df_rank, campo, "Quantidade", top_n)
     st.divider()
 
     # ──────────────────────────────────────────
@@ -788,6 +973,7 @@ try:
             "Tipo pedido",
             "Categoria",
             "Marca",
+            "Fornecedor",
             "Produto",
             "Receita",
             "Liquido",
