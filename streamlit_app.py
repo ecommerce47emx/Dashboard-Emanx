@@ -2,60 +2,90 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
+# 1. Configuração da Página
 st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
 
-# URL da sua planilha (Certifique-se de que é o link de compartilhamento)
+# 2. URL da Planilha (Substitua pelo seu link de compartilhamento)
 url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?usp=sharing"
 
-# Conectando
+# 3. Conexão com Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 try:
-    # Lendo os dados
-    df = conn.read(spreadsheet=url_planilha, ttl="0") # ttl="0" para forçar atualização enquanto testamos
+    # Lendo os dados (ttl=0 força o refresh para testarmos agora)
+    df = conn.read(spreadsheet=url_planilha, ttl="0")
 
-    # --- PASSO CRUCIAL: LIMPEZA DOS CABEÇALHOS ---
-    # Remove espaços vazios antes/depois e garante que o nome seja exatamente o que você colou
+    # --- TRATAMENTO DE COLUNAS ---
+    # Limpa espaços em branco invisíveis nos nomes das colunas
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Exibe as colunas detectadas para você conferir no painel (depois pode apagar essa linha)
-    # st.write("Colunas detectadas:", df.columns.tolist())
+    # --- TRATAMENTO DE VALORES (MOEDA) ---
+    def limpar_moeda(valor):
+        if pd.isna(valor) or valor == "" or valor == " R$ -  ":
+            return 0.0
+        v = str(valor).replace('R$', '').replace('.', '').replace(',', '.').strip()
+        try:
+            return float(v)
+        except:
+            return 0.0
 
-    if "Estado" in df.columns:
-        st.title("📊 Dashboard de Vendas")
+    if 'Receita' in df.columns:
+        df['Receita_Num'] = df['Receita'].apply(limpar_moeda)
+    
+    # --- INTERFACE ---
+    st.title("📊 Dashboard de Performance de Vendas")
 
-        # Tratamento da Receita (Removendo R$, pontos e trocando vírgula por ponto)
-        if 'Receita' in df.columns:
-            df['Receita_Num'] = df['Receita'].astype(str).str.replace('R\$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
-            df['Receita_Num'] = pd.to_numeric(df['Receita_Num'], errors='coerce').fillna(0)
+    # Verificação de segurança: se as colunas necessárias existem
+    colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido", "Status do pedido"]
+    if all(col in df.columns for col in colunas_necessarias):
 
-        # Filtros
-        st.sidebar.header("Filtros")
+        # --- FILTROS LATERAIS ---
+        st.sidebar.header("Filtros de Visualização")
         
-        # Estado
-        lista_estados = sorted(df["Estado"].dropna().unique())
-        estados_sel = st.sidebar.multiselect("Estados", options=lista_estados, default=lista_estados)
+        # Filtro de Marketplace
+        mkt_lista = sorted(df["Grupo de Marketplace"].dropna().unique())
+        mkt_sel = st.sidebar.multiselect("Selecione o Marketplace", options=mkt_lista, default=mkt_lista)
 
-        # Status
-        lista_status = sorted(df["Status do pedido"].dropna().unique())
-        status_sel = st.sidebar.multiselect("Status", options=lista_status, default=lista_status)
+        # Filtro de Status
+        status_lista = sorted(df["Status do pedido"].dropna().unique())
+        status_sel = st.sidebar.multiselect("Status do Pedido", options=status_lista, default=status_lista)
 
-        # Filtragem
-        df_filtrado = df[df["Estado"].isin(estados_sel) & df["Status do pedido"].isin(status_sel)]
+        # Aplicando filtros
+        df_filtrado = df[
+            (df["Grupo de Marketplace"].isin(mkt_sel)) & 
+            (df["Status do pedido"].isin(status_sel))
+        ]
 
-        # Métricas
+        # --- MÉTRICAS PRINCIPAIS ---
         c1, c2, c3 = st.columns(3)
-        c1.metric("Faturamento", f"R$ {df_filtrado['Receita_Num'].sum():,.2f}")
-        c2.metric("Pedidos", len(df_filtrado))
-        c3.metric("Qtd Vendida", int(df_filtrado["Quantidade vendida"].sum()))
+        total_faturamento = df_filtrado['Receita_Num'].sum()
+        c1.metric("Faturamento Total", f"R$ {total_faturamento:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'))
+        c2.metric("Total de Pedidos", len(df_filtrado))
+        
+        qtd_total = pd.to_numeric(df_filtrado["Quantidade vendida"], errors='coerce').sum()
+        c3.metric("Itens Vendidos", int(qtd_total))
 
-        # Gráfico Simples
-        st.subheader("Faturamento por Estado")
-        st.bar_chart(df_filtrado.groupby("Estado")["Receita_Num"].sum())
+        st.divider()
+
+        # --- GRÁFICO: MARKETPLACE E TIPO PEDIDO ---
+        st.subheader("Faturamento por Grupo de Marketplace e Tipo de Pedido")
+        
+        # Agrupando os dados
+        df_chart = df_filtrado.groupby(['Grupo de Marketplace', 'Tipo pedido'])['Receita_Num'].sum().reset_index()
+        
+        # Pivotando para criar o gráfico de barras empilhadas
+        df_pivot = df_chart.pivot(index='Grupo de Marketplace', columns='Tipo pedido', values='Receita_Num').fillna(0)
+        
+        st.bar_chart(df_pivot)
+
+        # --- TABELA DETALHADA ---
+        with st.expander("Ver Detalhamento dos Pedidos"):
+            colunas_exibir = ['Data emissao', 'Grupo de Marketplace', 'Tipo pedido', 'Produto', 'Receita', 'Status do pedido']
+            st.dataframe(df_filtrado[colunas_exibir], use_container_width=True)
 
     else:
-        st.error(f"Erro: Coluna 'Estado' não encontrada. Colunas lidas: {df.columns.tolist()}")
+        st.error(f"Erro: Colunas não encontradas. Verifique se os nomes na planilha estão corretos.")
+        st.write("Colunas detectadas:", df.columns.tolist())
 
 except Exception as e:
-    st.error(f"Erro ao conectar com a planilha: {e}")
-    st.info("Dica: Verifique se a planilha está compartilhada como 'Qualquer pessoa com o link pode ler'.")
+    st.error(f"Não foi possível carregar os dados: {e}")
