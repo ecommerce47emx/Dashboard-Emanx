@@ -2,74 +2,60 @@ import streamlit as st
 import pandas as pd
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuração inicial da página
 st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
-st.title("📊 Dashboard de Vendas - E-commerce")
 
-# 2. Conectando com o Google Sheets
-# Nota: Substitua a URL abaixo pelo link da sua planilha. 
-# Para este exemplo simples funcionar direto, a planilha precisa estar com acesso "Qualquer pessoa com o link pode ver".
+# URL da sua planilha (Certifique-se de que é o link de compartilhamento)
 url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?usp=sharing"
 
-# Cria a conexão e lê os dados
+# Conectando
 conn = st.connection("gsheets", type=GSheetsConnection)
-df = conn.read(spreadsheet=url_planilha, ttl="10m") # ttl="10m" faz o cache dos dados por 10 minutos
 
-# 3. Tratamento de Dados
-# Limpando a coluna 'Receita' para remover o 'R$', pontos e trocar vírgula por ponto para transformar em número
-if 'Receita' in df.columns:
-    df['Receita_Numerica'] = df['Receita'].astype(str).str.replace('R\$', '', regex=True)
-    df['Receita_Numerica'] = df['Receita_Numerica'].str.replace('.', '', regex=False)
-    df['Receita_Numerica'] = df['Receita_Numerica'].str.replace(',', '.', regex=False)
-    df['Receita_Numerica'] = pd.to_numeric(df['Receita_Numerica'], errors='coerce')
+try:
+    # Lendo os dados
+    df = conn.read(spreadsheet=url_planilha, ttl="0") # ttl="0" para forçar atualização enquanto testamos
 
-# 4. Criando Filtros na Barra Lateral
-st.sidebar.header("Filtros")
-estado_selecionado = st.sidebar.multiselect(
-    "Selecione o Estado:",
-    options=df["Estado"].dropna().unique(),
-    default=df["Estado"].dropna().unique()
-)
+    # --- PASSO CRUCIAL: LIMPEZA DOS CABEÇALHOS ---
+    # Remove espaços vazios antes/depois e garante que o nome seja exatamente o que você colou
+    df.columns = [str(c).strip() for c in df.columns]
 
-status_selecionado = st.sidebar.multiselect(
-    "Status do Pedido:",
-    options=df["Status do pedido"].dropna().unique(),
-    default=df["Status do pedido"].dropna().unique()
-)
+    # Exibe as colunas detectadas para você conferir no painel (depois pode apagar essa linha)
+    # st.write("Colunas detectadas:", df.columns.tolist())
 
-# Aplicando os filtros ao dataframe
-df_filtrado = df[
-    (df["Estado"].isin(estado_selecionado)) & 
-    (df["Status do pedido"].isin(status_selecionado))
-]
+    if "Estado" in df.columns:
+        st.title("📊 Dashboard de Vendas")
 
-# 5. Criando as Métricas Principais (Cards)
-st.markdown("### Resumo")
-col1, col2, col3 = st.columns(3)
+        # Tratamento da Receita (Removendo R$, pontos e trocando vírgula por ponto)
+        if 'Receita' in df.columns:
+            df['Receita_Num'] = df['Receita'].astype(str).str.replace('R\$', '', regex=True).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
+            df['Receita_Num'] = pd.to_numeric(df['Receita_Num'], errors='coerce').fillna(0)
 
-total_receita = df_filtrado['Receita_Numerica'].sum()
-total_pedidos = len(df_filtrado)
-ticket_medio = total_receita / total_pedidos if total_pedidos > 0 else 0
+        # Filtros
+        st.sidebar.header("Filtros")
+        
+        # Estado
+        lista_estados = sorted(df["Estado"].dropna().unique())
+        estados_sel = st.sidebar.multiselect("Estados", options=lista_estados, default=lista_estados)
 
-col1.metric("Faturamento Total", f"R$ {total_receita:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.'))
-col2.metric("Total de Pedidos", total_pedidos)
-col3.metric("Ticket Médio", f"R$ {ticket_medio:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.'))
+        # Status
+        lista_status = sorted(df["Status do pedido"].dropna().unique())
+        status_sel = st.sidebar.multiselect("Status", options=lista_status, default=lista_status)
 
-st.divider()
+        # Filtragem
+        df_filtrado = df[df["Estado"].isin(estados_sel) & df["Status do pedido"].isin(status_sel)]
 
-# 6. Criando Gráficos
-col_grafico1, col_grafico2 = st.columns(2)
+        # Métricas
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Faturamento", f"R$ {df_filtrado['Receita_Num'].sum():,.2f}")
+        c2.metric("Pedidos", len(df_filtrado))
+        c3.metric("Qtd Vendida", int(df_filtrado["Quantidade vendida"].sum()))
 
-with col_grafico1:
-    st.markdown("#### Vendas por Estado")
-    vendas_estado = df_filtrado.groupby('Estado')['Receita_Numerica'].sum().reset_index()
-    st.bar_chart(vendas_estado, x='Estado', y='Receita_Numerica')
+        # Gráfico Simples
+        st.subheader("Faturamento por Estado")
+        st.bar_chart(df_filtrado.groupby("Estado")["Receita_Num"].sum())
 
-with col_grafico2:
-    st.markdown("#### Quantidade por Status")
-    status_contagem = df_filtrado['Status do pedido'].value_counts().reset_index()
-    st.bar_chart(status_contagem, x='Status do pedido', y='count')
+    else:
+        st.error(f"Erro: Coluna 'Estado' não encontrada. Colunas lidas: {df.columns.tolist()}")
 
-# 7. Tabela de Dados Detalhados
-st.markdown("#### Detalhamento dos Pedidos")
-st.dataframe(df_filtrado[['Data emissao', 'Cliente', 'Estado', 'Produto', 'Receita', 'Status do pedido']], use_container_width=True)
+except Exception as e:
+    st.error(f"Erro ao conectar com a planilha: {e}")
+    st.info("Dica: Verifique se a planilha está compartilhada como 'Qualquer pessoa com o link pode ler'.")
