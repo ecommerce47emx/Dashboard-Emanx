@@ -168,7 +168,7 @@ try:
 
     # Marca devolução
     df["Eh_Devolucao"] = (
-        df["Tipo pedido"]
+        df["Grupo de Marketplace"]
         .astype("string")
         .str.upper()
         .str.contains("DEVOLU", na=False)
