@@ -266,38 +266,65 @@ def normalizar_texto(valor):
 
 def parse_data_serie(series: pd.Series) -> pd.Series:
     """
-    Parse robusto para datas brasileiras.
-    Prioriza formatos explícitos antes de cair no parser genérico.
+    Parse estrito para datas.
+    Prioriza formato brasileiro.
+    Também suporta ISO e serial do Excel.
     """
     if series is None:
         return pd.Series(dtype="datetime64[ns]")
 
-    raw = series.astype("string").str.strip()
-    parsed = pd.Series(pd.NaT, index=series.index)
+    s = series.copy()
 
-    formatos = [
+    # Se já vier datetime, só normaliza
+    if pd.api.types.is_datetime64_any_dtype(s):
+        return pd.to_datetime(s, errors="coerce").dt.normalize()
+
+    raw = s.astype("string").str.strip()
+    parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
+
+    invalidas = raw.isna() | (raw == "") | (raw.str.lower() == "nan")
+
+    faltando = ~invalidas
+
+    # 1. formato brasileiro explícito
+    formatos_br = [
         "%d/%m/%Y",
         "%d/%m/%Y %H:%M:%S",
         "%d/%m/%Y %H:%M",
-        "%Y-%m-%d",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
         "%d-%m-%Y",
         "%d-%m-%Y %H:%M:%S",
         "%d-%m-%Y %H:%M",
     ]
 
-    faltando = raw.notna() & (raw != "")
-
-    for fmt in formatos:
+    for fmt in formatos_br:
         if not faltando.any():
             break
         tentativa = pd.to_datetime(raw[faltando], format=fmt, errors="coerce")
         ok = tentativa.notna()
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
-        faltando = parsed.isna() & raw.notna() & (raw != "")
+        faltando = parsed.isna() & (~invalidas)
 
+    # 2. ISO explícito
+    formatos_iso = [
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y/%m/%d",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+    ]
+
+    for fmt in formatos_iso:
+        if not faltando.any():
+            break
+        tentativa = pd.to_datetime(raw[faltando], format=fmt, errors="coerce")
+        ok = tentativa.notna()
+        if ok.any():
+            parsed.loc[tentativa[ok].index] = tentativa[ok]
+        faltando = parsed.isna() & (~invalidas)
+
+    # 3. limpeza final, ainda forçando dayfirst
     if faltando.any():
         raw_limpo = (
             raw[faltando]
@@ -310,7 +337,8 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
 
-    faltando = parsed.isna() & raw.notna() & (raw != "")
+    # 4. serial Excel
+    faltando = parsed.isna() & (~invalidas)
     if faltando.any():
         numericos = pd.to_numeric(
             raw[faltando].str.replace(",", ".", regex=False),
@@ -540,6 +568,10 @@ def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categori
 
 
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
+    """
+    Monta comparativo por posição do dia no período.
+    Usa somente datas válidas já normalizadas.
+    """
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
 
@@ -547,33 +579,37 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
 
     base_valida = df_base[df_base[coluna_data].notna()].copy()
 
+    atual_base = filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
+    anterior_base = filtrar_intervalo(base_valida, coluna_data, ini_ant, fim_ant)
+
     datas_atuais = pd.date_range(data_ini, data_fim, freq="D")
     datas_anteriores = pd.date_range(ini_ant, fim_ant, freq="D")
 
     atual = (
-        filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
-        .groupby(coluna_data, as_index=True)[coluna_valor]
+        atual_base.groupby(coluna_data, as_index=True)[coluna_valor]
         .sum()
         .reindex(datas_atuais, fill_value=0)
+        .rename("Valor")
         .reset_index()
+        .rename(columns={"index": "Data_Original"})
     )
-    atual.columns = ["Data_Original", "Valor"]
     atual["Posicao_Dia"] = range(1, len(atual) + 1)
+    atual["Posicao_Label"] = atual["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
     atual["Serie"] = "Período Atual"
 
     anterior = (
-        filtrar_intervalo(base_valida, coluna_data, ini_ant, fim_ant)
-        .groupby(coluna_data, as_index=True)[coluna_valor]
+        anterior_base.groupby(coluna_data, as_index=True)[coluna_valor]
         .sum()
         .reindex(datas_anteriores, fill_value=0)
+        .rename("Valor")
         .reset_index()
+        .rename(columns={"index": "Data_Original"})
     )
-    anterior.columns = ["Data_Original", "Valor"]
     anterior["Posicao_Dia"] = range(1, len(anterior) + 1)
+    anterior["Posicao_Label"] = anterior["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
     anterior["Serie"] = "Período Anterior"
 
     df_cmp = pd.concat([atual, anterior], ignore_index=True)
-    df_cmp["Posicao_Label"] = df_cmp["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
 
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
@@ -596,9 +632,14 @@ try:
 
     df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
     df["Data_Venda_Pura"] = parse_data_coluna(df, "Data da Venda")
+    
+    # Coluna exclusiva do gráfico
+    df["Data_Grafico"] = df["Data_Venda_Pura"].where(
+        df["Data_Venda_Pura"].notna(),
+        df["Data_Emissao_Filtro"]
+    )
 
-    # Para gráfico comparativo
-    df["Data_Venda_Analise"] = df["Data_Venda_Pura"].fillna(df["Data_Emissao_Filtro"])
+df["Dia_Grafico"] = pd.to_datetime(df["Data_Grafico"], errors="coerce").dt.normalize()
 
     df["Eh_Devolucao"] = (
         df["Grupo de Marketplace"]
@@ -821,12 +862,12 @@ try:
         data_ini is not None and
         data_fim is not None and
         not df_grafico_base.empty and
-        "Data_Venda_Analise" in df_grafico_base.columns and
-        df_grafico_base["Data_Venda_Analise"].notna().any()
+        "Dia_Grafico" in df_grafico_base.columns and
+        df_grafico_base["Dia_Grafico"].notna().any()
     ):
         df_cmp, ini_ant_chart, fim_ant_chart, dias_periodo_chart = montar_df_comparativo(
             df_base=df_grafico_base,
-            coluna_data="Data_Venda_Analise",
+            coluna_data="Dia_Grafico",
             coluna_valor="Receita_Num",
             data_ini=data_ini,
             data_fim=data_fim,
