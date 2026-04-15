@@ -1,0 +1,8 @@
+import shutil
+
+modo = "light"  # ou "dark"
+
+if modo == "light":
+    shutil.copy(".streamlit/config_light.toml", ".streamlit/config.toml")
+else:
+    shutil.copy(".streamlit/config_dark.toml", ".streamlit/config.toml")
