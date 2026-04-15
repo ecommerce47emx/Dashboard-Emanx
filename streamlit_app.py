@@ -545,35 +545,27 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
 # ── CHANGE 1: empty filter = select all ──────────────────────────────────────
 def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categorias_sel, incluir_devolucao):
     """
-    Regra: lista vazia == todos selecionados (sem filtro dimensional).
+    Regras:
+    - toggle desligado: traz somente não devolução
+    - toggle ligado: traz somente devolução
+    - marketplace vazio: equivale a todos
+    - quando toggle ligado, ignora filtro de marketplace
     """
-    # Se nenhum marketplace for selecionado, trata como todos
-    if not marketplaces_sel:
-        marketplaces_efetivos = df_base.loc[
-            ~df_base["Eh_Devolucao"], "Grupo de Marketplace"
-        ].dropna().unique().tolist()
-    else:
-        marketplaces_efetivos = marketplaces_sel
-
-    mask_marketplace = df_base["Grupo de Marketplace"].isin(marketplaces_efetivos)
-
     if incluir_devolucao:
-        mask_marketplace = mask_marketplace | df_base["Eh_Devolucao"]
+        df_out = df_base[df_base["Eh_Devolucao"]].copy()
     else:
-        mask_marketplace = mask_marketplace & (~df_base["Eh_Devolucao"])
+        df_out = df_base[~df_base["Eh_Devolucao"]].copy()
 
-    df_out = df_base[mask_marketplace].copy()
+        if marketplaces_sel:
+            df_out = df_out[df_out["Grupo de Marketplace"].isin(marketplaces_sel)]
 
-    # Marca: lista vazia == todos
     if marcas_sel:
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
 
-    # Categoria: lista vazia == todos
     if categorias_sel:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
 
     return df_out
-
 
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
     data_ini = pd.Timestamp(data_ini).normalize()
@@ -678,7 +670,7 @@ try:
         placeholder="Todos os marketplaces",
     )
 
-    incluir_devolucao = st.sidebar.toggle("Incluir Devolução", value=False)
+    incluir_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
 
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
@@ -957,70 +949,68 @@ try:
     st.divider()
 
     # ──────────────────────────────────────────
-    # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
-    # ── CHANGE 3: sem filtro = somente total por grupo; com filtro = por tipo
-    # ──────────────────────────────────────────
-    st.subheader("Faturamento por Marketplace e Tipo de Pedido")
+# 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
+# ──────────────────────────────────────────
+st.subheader("Faturamento por Marketplace e Tipo de Pedido")
 
-    if not df_f.empty:
-        # Determina se o usuário escolheu marketplaces específicos
-        filtro_mkt_ativo = bool(mkt_sel)  # True = filtragem explícita
+if not df_f.empty:
+    filtro_mkt_ativo = bool(mkt_sel) and (not incluir_devolucao)
 
-        if filtro_mkt_ativo:
-            # Detalha por Tipo de Pedido quando há seleção específica
-            df_mkt = (
-                df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Receita_Num": "Receita"})
-            )
-            chart_bar = (
-                alt.Chart(df_mkt)
-                .mark_bar()
-                .encode(
-                    x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
-                    y=alt.Y("Receita:Q", title="Receita (R$)"),
-                    color=alt.Color("Tipo pedido:N", title="Tipo"),
-                    tooltip=[
-                        "Grupo de Marketplace:N",
-                        "Tipo pedido:N",
-                        alt.Tooltip("Receita:Q", format=",.2f"),
-                    ],
-                )
-                .properties(height=320)
-            )
-        else:
-            # Sem filtro de marketplace: exibe somente total por grupo
-            df_mkt = (
-                df_f.groupby("Grupo de Marketplace")["Receita_Num"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Receita_Num": "Receita"})
-            )
-            chart_bar = (
-                alt.Chart(df_mkt)
-                .mark_bar()
-                .encode(
-                    x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
-                    y=alt.Y("Receita:Q", title="Receita (R$)"),
-                    tooltip=[
-                        "Grupo de Marketplace:N",
-                        alt.Tooltip("Receita:Q", format=",.2f"),
-                    ],
-                )
-                .properties(height=320)
-            )
+    if filtro_mkt_ativo:
+        df_mkt = (
+            df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
+            .sum()
+            .reset_index()
+            .rename(columns={"Receita_Num": "Receita"})
+        )
 
-        st.altair_chart(chart_bar, use_container_width=True)
-
-        if filtro_mkt_ativo:
-            st.caption("Detalhado por Tipo de Pedido (filtro de marketplace ativo).")
-        else:
-            st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para ver o detalhamento por tipo de pedido.")
+        chart_bar = (
+            alt.Chart(df_mkt)
+            .mark_bar()
+            .encode(
+                y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort="-x"),
+                x=alt.X("Receita:Q", title="Receita (R$)"),
+                color=alt.Color("Tipo pedido:N", title="Tipo"),
+                tooltip=[
+                    "Grupo de Marketplace:N",
+                    "Tipo pedido:N",
+                    alt.Tooltip("Receita:Q", format=",.2f"),
+                ],
+            )
+            .properties(height=380)
+        )
     else:
-        st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
+        df_mkt = (
+            df_f.groupby("Grupo de Marketplace")["Receita_Num"]
+            .sum()
+            .reset_index()
+            .rename(columns={"Receita_Num": "Receita"})
+        )
 
-    st.divider()
+        chart_bar = (
+            alt.Chart(df_mkt)
+            .mark_bar()
+            .encode(
+                y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort="-x"),
+                x=alt.X("Receita:Q", title="Receita (R$)"),
+                tooltip=[
+                    "Grupo de Marketplace:N",
+                    alt.Tooltip("Receita:Q", format=",.2f"),
+                ],
+            )
+            .properties(height=380)
+        )
+
+    st.altair_chart(chart_bar, use_container_width=True)
+
+    if incluir_devolucao:
+        st.caption("Exibindo apenas pedidos de devolução.")
+    elif filtro_mkt_ativo:
+        st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
+    else:
+        st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para detalhar por tipo de pedido.")
+else:
+    st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
     # ──────────────────────────────────────────
     # 13. RANKINGS
