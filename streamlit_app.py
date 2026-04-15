@@ -17,7 +17,7 @@ st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
 # ──────────────────────────────────────────────
-url_planilha = ""
+url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 
 # ──────────────────────────────────────────────
