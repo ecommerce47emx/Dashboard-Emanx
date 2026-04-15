@@ -241,16 +241,53 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
         )
 
 
-def limpar_moeda(valor):
-    if pd.isna(valor) or str(valor).strip() in ("", "R$ -", " R$ - "):
-        return 0.0
-
-    v = str(valor).replace("R$", "").replace(".", "").replace(",", ".").strip()
-
-    try:
-        return float(v)
-    except ValueError:
-        return 0.0
+    def limpar_moeda(valor):
+        """
+        Converte moeda BRL para float, incluindo casos de devolução:
+        - R$ -123,45
+        - -R$ 123,45
+        - (123,45)
+        - 123,45-
+        - espaços extras
+        """
+        if pd.isna(valor):
+            return 0.0
+    
+        s = str(valor).strip()
+    
+        if s == "":
+            return 0.0
+    
+        negativo = False
+    
+        if "(" in s and ")" in s:
+            negativo = True
+    
+        s = s.replace("R$", "").replace("r$", "").strip()
+    
+        if s.startswith("-"):
+            negativo = True
+        if s.endswith("-"):
+            negativo = True
+    
+        s = s.replace("(", "").replace(")", "")
+        s = s.replace("-", "")
+        s = s.replace(" ", "")
+    
+        # remove separador de milhar e normaliza decimal
+        s = s.replace(".", "").replace(",", ".")
+    
+        # mantém apenas dígitos e ponto
+        s = re.sub(r"[^0-9.]", "", s)
+    
+        if s == "":
+            return 0.0
+    
+        try:
+            numero = float(s)
+            return -numero if negativo else numero
+        except ValueError:
+            return 0.0
 
 
 def formatar_brl(valor: float) -> str:
@@ -859,9 +896,11 @@ try:
         calcular_delta_percentual(custo_total, custo_anterior)
     )
 
+    rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
+    
     linha2[0].metric(
-        "Itens Vendidos",
-        f"{qtd_total:,}",
+        rotulo_itens,
+        formatar_int(qtd_total),
         calcular_delta_percentual(qtd_total, qtd_anterior)
     )
     linha2[1].metric(
