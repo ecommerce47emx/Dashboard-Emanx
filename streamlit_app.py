@@ -795,7 +795,7 @@ try:
     # ──────────────────────────────────────────
     # 8. CABEÇALHO
     # ──────────────────────────────────────────
-    st.title("Dashboard de Performance de Vendas")
+    st.title("EmanxTelecom - Dashboard de Performance de Vendas")
     st.caption(
         f"{len(df_f):,} linhas no detalhamento filtradas por Data emissao | "
         f"Gráfico comparativo calculado por Data da Venda com fallback para Data emissao"
