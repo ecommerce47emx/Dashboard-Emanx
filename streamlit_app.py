@@ -12,7 +12,7 @@ from streamlit_gsheets import GSheetsConnection
 # ──────────────────────────────────────────────
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ──────────────────────────────────────────────
-st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
+st.set_page_config(page_title="EmanxTelecom - Dashboard de Vendas", layout="wide")
 
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
