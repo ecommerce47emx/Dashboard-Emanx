@@ -1,0 +1,20 @@
+[theme]
+base = "light"
+
+# General color setup
+textColor = "#1f2937"
+primaryColor = "#16a34a"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f3f4f6"
+
+# Widgets
+showWidgetBorder = true
+borderColor = "#d1d5db"
+
+# Dataframes
+dataframeHeaderBackgroundColor = "#e5e7eb"
+
+# Heading text
+headingFont = "Space Grotesk"
+headingFontWeights = [300, 400, 400, 300, 300, 300]
+headingFontSizes = ["2.5rem", "1.5rem", "1rem"]
