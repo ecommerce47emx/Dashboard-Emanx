@@ -17,7 +17,7 @@ st.set_page_config(page_title="Dashboard de Vendas", layout="wide")
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
 # ──────────────────────────────────────────────
-url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
+url_planilha = ""
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 
 # ──────────────────────────────────────────────
@@ -239,6 +239,8 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
             """,
             unsafe_allow_html=True
         )
+
+
 def limpar_moeda(valor):
     if pd.isna(valor) or str(valor).strip() in ("", "R$ -", " R$ - "):
         return 0.0
@@ -275,7 +277,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
 
     s = series.copy()
 
-    # Se já vier datetime, só normaliza
     if pd.api.types.is_datetime64_any_dtype(s):
         return pd.to_datetime(s, errors="coerce").dt.normalize()
 
@@ -286,7 +287,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
 
     faltando = ~invalidas
 
-    # 1. formato brasileiro explícito
     formatos_br = [
         "%d/%m/%Y",
         "%d/%m/%Y %H:%M:%S",
@@ -305,7 +305,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
             parsed.loc[tentativa[ok].index] = tentativa[ok]
         faltando = parsed.isna() & (~invalidas)
 
-    # 2. ISO explícito
     formatos_iso = [
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M:%S",
@@ -324,7 +323,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
             parsed.loc[tentativa[ok].index] = tentativa[ok]
         faltando = parsed.isna() & (~invalidas)
 
-    # 3. limpeza final, ainda forçando dayfirst
     if faltando.any():
         raw_limpo = (
             raw[faltando]
@@ -337,7 +335,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
 
-    # 4. serial Excel
     faltando = parsed.isna() & (~invalidas)
     if faltando.any():
         numericos = pd.to_numeric(
@@ -545,11 +542,20 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     }
 
 
+# ── CHANGE 1: empty filter = select all ──────────────────────────────────────
 def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categorias_sel, incluir_devolucao):
-    if marketplaces_sel:
-        mask_marketplace = df_base["Grupo de Marketplace"].isin(marketplaces_sel)
+    """
+    Regra: lista vazia == todos selecionados (sem filtro dimensional).
+    """
+    # Se nenhum marketplace for selecionado, trata como todos
+    if not marketplaces_sel:
+        marketplaces_efetivos = df_base.loc[
+            ~df_base["Eh_Devolucao"], "Grupo de Marketplace"
+        ].dropna().unique().tolist()
     else:
-        mask_marketplace = pd.Series(False, index=df_base.index)
+        marketplaces_efetivos = marketplaces_sel
+
+    mask_marketplace = df_base["Grupo de Marketplace"].isin(marketplaces_efetivos)
 
     if incluir_devolucao:
         mask_marketplace = mask_marketplace | df_base["Eh_Devolucao"]
@@ -558,20 +564,18 @@ def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categori
 
     df_out = df_base[mask_marketplace].copy()
 
-    if marcas_sel is not None:
+    # Marca: lista vazia == todos
+    if marcas_sel:
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
 
-    if categorias_sel is not None:
+    # Categoria: lista vazia == todos
+    if categorias_sel:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
 
     return df_out
 
 
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
-    """
-    Monta comparativo por posição do dia no período.
-    Usa somente datas válidas já normalizadas.
-    """
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
 
@@ -632,8 +636,7 @@ try:
 
     df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
     df["Data_Venda_Pura"] = parse_data_coluna(df, "Data da Venda")
-    
-    # Coluna exclusiva do gráfico
+
     df["Data_Grafico"] = df["Data_Venda_Pura"].where(
         df["Data_Venda_Pura"].notna(),
         df["Data_Emissao_Filtro"]
@@ -646,6 +649,10 @@ try:
         .apply(normalizar_texto)
         .str.contains("DEVOLUCAO", na=False)
     )
+
+    # ── CHANGE 4: devoluções exibidas em valor absoluto ───────────────────────
+    for col_num in ["Receita_Num", "Liquido_Num", "Custo_Num", "Qtd_Num"]:
+        df.loc[df["Eh_Devolucao"], col_num] = df.loc[df["Eh_Devolucao"], col_num].abs()
 
     df["img_url"] = df.apply(build_img_url, axis=1)
 
@@ -663,21 +670,37 @@ try:
     mkt_lista = sorted(
         df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
     )
-    mkt_sel = st.sidebar.multiselect("Marketplace", options=mkt_lista, default=mkt_lista)
+    # CHANGE 1: default vazio = todos
+    mkt_sel = st.sidebar.multiselect(
+        "Marketplace",
+        options=mkt_lista,
+        default=[],
+        placeholder="Todos os marketplaces",
+    )
 
     incluir_devolucao = st.sidebar.toggle("Incluir Devolução", value=False)
 
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
-        marca_sel = st.sidebar.multiselect("Marca", options=marca_lista, default=marca_lista)
+        marca_sel = st.sidebar.multiselect(
+            "Marca",
+            options=marca_lista,
+            default=[],
+            placeholder="Todas as marcas",
+        )
     else:
-        marca_sel = None
+        marca_sel = []
 
     if "Categoria" in df.columns:
         categoria_lista = sorted(df["Categoria"].dropna().unique())
-        categoria_sel = st.sidebar.multiselect("Categoria", options=categoria_lista, default=categoria_lista)
+        categoria_sel = st.sidebar.multiselect(
+            "Categoria",
+            options=categoria_lista,
+            default=[],
+            placeholder="Todas as categorias",
+        )
     else:
-        categoria_sel = None
+        categoria_sel = []
 
     datas_validas = df["Data_Emissao_Filtro"].dropna()
 
@@ -696,9 +719,40 @@ try:
             default_ini = data_min
             default_fim = data_max
 
+        # ── CHANGE 2: atalhos de período rápido ──────────────────────────────
+        st.sidebar.markdown("**Período Rápido**")
+        periodo_rapido = st.sidebar.radio(
+            "Selecione um atalho",
+            options=["Personalizado", "Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias"],
+            index=0,
+            label_visibility="collapsed",
+            horizontal=False,
+        )
+
+        if periodo_rapido == "Últimos 7 dias":
+            _ini_rapido = (ontem_sp - pd.Timedelta(days=6)).date()
+            _fim_rapido = ontem_sp.date()
+            _ini_rapido = max(_ini_rapido, data_min)
+            _fim_rapido = min(_fim_rapido, data_max)
+            periodo_value = (_ini_rapido, _fim_rapido)
+        elif periodo_rapido == "Últimos 15 dias":
+            _ini_rapido = (ontem_sp - pd.Timedelta(days=14)).date()
+            _fim_rapido = ontem_sp.date()
+            _ini_rapido = max(_ini_rapido, data_min)
+            _fim_rapido = min(_fim_rapido, data_max)
+            periodo_value = (_ini_rapido, _fim_rapido)
+        elif periodo_rapido == "Últimos 30 dias":
+            _ini_rapido = (ontem_sp - pd.Timedelta(days=29)).date()
+            _fim_rapido = ontem_sp.date()
+            _ini_rapido = max(_ini_rapido, data_min)
+            _fim_rapido = min(_fim_rapido, data_max)
+            periodo_value = (_ini_rapido, _fim_rapido)
+        else:
+            periodo_value = (default_ini, default_fim)
+
         periodo = st.sidebar.date_input(
             "Período de Venda",
-            value=(default_ini, default_fim),
+            value=periodo_value,
             min_value=data_min,
             max_value=data_max,
         )
@@ -707,8 +761,8 @@ try:
             data_ini = pd.Timestamp(periodo[0]).normalize()
             data_fim = pd.Timestamp(periodo[1]).normalize()
         else:
-            data_ini = pd.Timestamp(default_ini).normalize()
-            data_fim = pd.Timestamp(default_fim).normalize()
+            data_ini = pd.Timestamp(periodo_value[0]).normalize()
+            data_fim = pd.Timestamp(periodo_value[1]).normalize()
     else:
         data_ini, data_fim = None, None
 
@@ -723,7 +777,6 @@ try:
         incluir_devolucao=incluir_devolucao,
     )
 
-    # Resumo, projeção, ranking e detalhamento por Data emissao
     if data_ini is not None and data_fim is not None:
         df_f = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
         ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
@@ -734,7 +787,6 @@ try:
         ini_ant = fim_ant = None
         dias_periodo = 0
 
-    # Base exclusiva do gráfico por Data da Venda
     if data_ini is not None and data_fim is not None:
         df_grafico_base = df_dim.copy()
     else:
@@ -778,13 +830,14 @@ try:
     # ──────────────────────────────────────────
     receita_total = df_f["Receita_Num"].sum()
     liquido_total = df_f["Liquido_Num"].sum()
-    custo_medio = df_f["Custo_Num"].mean() if len(df_f) > 0 else 0.0
+    # ── CHANGE 5: custo médio → soma do custo total ───────────────────────────
+    custo_total = df_f["Custo_Num"].sum()
     qtd_total = int(df_f["Qtd_Num"].sum())
     total_pedidos = len(df_f)
 
     receita_anterior = df_prev["Receita_Num"].sum()
     liquido_anterior = df_prev["Liquido_Num"].sum()
-    custo_anterior = df_prev["Custo_Num"].mean() if len(df_prev) > 0 else 0.0
+    custo_anterior = df_prev["Custo_Num"].sum()
     qtd_anterior = int(df_prev["Qtd_Num"].sum())
     pedidos_anterior = len(df_prev)
 
@@ -807,10 +860,11 @@ try:
         formatar_brl(liquido_total),
         calcular_delta_percentual(liquido_total, liquido_anterior)
     )
+    # Label atualizado para refletir a soma
     linha1[2].metric(
-        "Custo Médio",
-        formatar_brl(custo_medio),
-        calcular_delta_percentual(custo_medio, custo_anterior)
+        "Custo Total",
+        formatar_brl(custo_total),
+        calcular_delta_percentual(custo_total, custo_anterior)
     )
 
     linha2[0].metric(
@@ -904,39 +958,71 @@ try:
 
     # ──────────────────────────────────────────
     # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
+    # ── CHANGE 3: sem filtro = somente total por grupo; com filtro = por tipo
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Marketplace e Tipo de Pedido")
 
     if not df_f.empty:
-        df_mkt = (
-            df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
-            .sum()
-            .reset_index()
-            .rename(columns={"Receita_Num": "Receita"})
-        )
+        # Determina se o usuário escolheu marketplaces específicos
+        filtro_mkt_ativo = bool(mkt_sel)  # True = filtragem explícita
 
-        chart_bar = (
-            alt.Chart(df_mkt)
-            .mark_bar()
-            .encode(
-                x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
-                y=alt.Y("Receita:Q", title="Receita (R$)"),
-                color=alt.Color("Tipo pedido:N", title="Tipo"),
-                tooltip=[
-                    "Grupo de Marketplace:N",
-                    "Tipo pedido:N",
-                    alt.Tooltip("Receita:Q", format=",.2f"),
-                ],
+        if filtro_mkt_ativo:
+            # Detalha por Tipo de Pedido quando há seleção específica
+            df_mkt = (
+                df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Receita_Num": "Receita"})
             )
-            .properties(height=320)
-        )
+            chart_bar = (
+                alt.Chart(df_mkt)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
+                    y=alt.Y("Receita:Q", title="Receita (R$)"),
+                    color=alt.Color("Tipo pedido:N", title="Tipo"),
+                    tooltip=[
+                        "Grupo de Marketplace:N",
+                        "Tipo pedido:N",
+                        alt.Tooltip("Receita:Q", format=",.2f"),
+                    ],
+                )
+                .properties(height=320)
+            )
+        else:
+            # Sem filtro de marketplace: exibe somente total por grupo
+            df_mkt = (
+                df_f.groupby("Grupo de Marketplace")["Receita_Num"]
+                .sum()
+                .reset_index()
+                .rename(columns={"Receita_Num": "Receita"})
+            )
+            chart_bar = (
+                alt.Chart(df_mkt)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Grupo de Marketplace:N", title="Marketplace", sort="-y"),
+                    y=alt.Y("Receita:Q", title="Receita (R$)"),
+                    tooltip=[
+                        "Grupo de Marketplace:N",
+                        alt.Tooltip("Receita:Q", format=",.2f"),
+                    ],
+                )
+                .properties(height=320)
+            )
+
         st.altair_chart(chart_bar, use_container_width=True)
+
+        if filtro_mkt_ativo:
+            st.caption("Detalhado por Tipo de Pedido (filtro de marketplace ativo).")
+        else:
+            st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para ver o detalhamento por tipo de pedido.")
     else:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
     st.divider()
 
-        # ──────────────────────────────────────────
+    # ──────────────────────────────────────────
     # 13. RANKINGS
     # ──────────────────────────────────────────
     st.subheader("Rankings")
@@ -1001,6 +1087,7 @@ try:
                         f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}."
                     )
                     render_ranking_grupo(df_rank, campo, "Quantidade", top_n)
+
     st.divider()
 
     # ──────────────────────────────────────────
