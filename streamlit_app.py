@@ -17,7 +17,7 @@ st.set_page_config(page_title="EmanxTelecom - Dashboard de Vendas", layout="wide
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
 # ──────────────────────────────────────────────
-url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
+url_planilha = ""
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 
 # ──────────────────────────────────────────────
@@ -579,13 +579,19 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     }
 
 
-# ── CHANGE 1: empty filter = select all ──────────────────────────────────────
-def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categorias_sel, incluir_devolucao):
+def aplicar_filtros_dimensionais(
+    df_base,
+    marketplaces_sel,
+    marcas_sel,
+    categorias_sel,
+    fornecedores_sel,       # ← NOVO
+    incluir_devolucao,
+):
     """
     Regras:
     - toggle desligado: traz somente não devolução
     - toggle ligado: traz somente devolução
-    - marketplace vazio: equivale a todos
+    - lista vazia = equivale a todos (para qualquer dimensão)
     - quando toggle ligado, ignora filtro de marketplace
     """
     if incluir_devolucao:
@@ -602,7 +608,12 @@ def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categori
     if categorias_sel:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
 
+    # ── filtro de fornecedor ──────────────────────────────────────────────────
+    if fornecedores_sel and "Fornecedor" in df_out.columns:
+        df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
+
     return df_out
+
 
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
     data_ini = pd.Timestamp(data_ini).normalize()
@@ -647,6 +658,68 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
 
+def montar_df_fornecedor_diario(df_base, coluna_data, data_ini, data_fim, top_n_fornecedores=8):
+    """
+    Monta DataFrame com receita diária por fornecedor para o período atual.
+    Limita aos top_n_fornecedores por receita total para manter o gráfico legível.
+    """
+    data_ini = pd.Timestamp(data_ini).normalize()
+    data_fim = pd.Timestamp(data_fim).normalize()
+
+    ini_ant, fim_ant, _ = periodo_anterior(data_ini, data_fim)
+
+    base_valida = df_base[df_base[coluna_data].notna() & df_base["Fornecedor"].notna()].copy()
+    base_valida = base_valida[base_valida["Fornecedor"].astype(str).str.strip() != ""]
+
+    # top fornecedores do período atual por receita total
+    atual_total = filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
+    if atual_total.empty:
+        return pd.DataFrame(), pd.DataFrame(), ini_ant, fim_ant
+
+    top_fornecedores = (
+        atual_total.groupby("Fornecedor")["Receita_Num"]
+        .sum()
+        .nlargest(top_n_fornecedores)
+        .index.tolist()
+    )
+
+    datas_atuais = pd.date_range(data_ini, data_fim, freq="D")
+    datas_anteriores = pd.date_range(ini_ant, fim_ant, freq="D")
+
+    def serie_fornecedor(df_periodo, datas_range, label_serie):
+        registros = []
+        for forn in top_fornecedores:
+            df_forn = df_periodo[df_periodo["Fornecedor"] == forn]
+            diario = (
+                df_forn.groupby(coluna_data)["Receita_Num"]
+                .sum()
+                .reindex(datas_range, fill_value=0)
+                .reset_index()
+                .rename(columns={"index": "Data_Original", coluna_data: "Data_Original"})
+            )
+            diario["Posicao_Dia"] = range(1, len(diario) + 1)
+            diario["Posicao_Label"] = diario["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
+            diario["Fornecedor"] = forn
+            diario["Serie"] = label_serie
+            diario.rename(columns={"Receita_Num": "Valor"}, errors="ignore")
+            if "Receita_Num" in diario.columns:
+                diario = diario.rename(columns={"Receita_Num": "Valor"})
+            else:
+                diario["Valor"] = diario.get("Valor", 0)
+            registros.append(diario)
+        if registros:
+            return pd.concat(registros, ignore_index=True)
+        return pd.DataFrame()
+
+    atual_base = filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
+    anterior_base = filtrar_intervalo(base_valida, coluna_data, ini_ant, fim_ant)
+
+    df_atual_forn = serie_fornecedor(atual_base, datas_atuais, "Período Atual")
+    df_anterior_forn = serie_fornecedor(anterior_base, datas_anteriores, "Período Anterior")
+
+    return df_atual_forn, df_anterior_forn, ini_ant, fim_ant
+
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -679,7 +752,6 @@ try:
         .str.contains("DEVOLUCAO", na=False)
     )
 
-    # ── CHANGE 4: devoluções exibidas em valor absoluto ───────────────────────
     for col_num in ["Receita_Num", "Liquido_Num", "Custo_Num", "Qtd_Num"]:
         df.loc[df["Eh_Devolucao"], col_num] = df.loc[df["Eh_Devolucao"], col_num].abs()
 
@@ -699,7 +771,6 @@ try:
     mkt_lista = sorted(
         df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
     )
-    # CHANGE 1: default vazio = todos
     mkt_sel = st.sidebar.multiselect(
         "Marketplace",
         options=mkt_lista,
@@ -731,6 +802,18 @@ try:
     else:
         categoria_sel = []
 
+    # ── NOVO: filtro de Fornecedor ────────────────────────────────────────────
+    if "Fornecedor" in df.columns:
+        fornecedor_lista = sorted(df["Fornecedor"].dropna().unique())
+        fornecedor_sel = st.sidebar.multiselect(
+            "Fornecedor",
+            options=fornecedor_lista,
+            default=[],
+            placeholder="Todos os fornecedores",
+        )
+    else:
+        fornecedor_sel = []
+
     datas_validas = df["Data_Emissao_Filtro"].dropna()
 
     hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
@@ -748,43 +831,64 @@ try:
             default_ini = data_min
             default_fim = data_max
 
-        # ── CHANGE 2: atalhos de período rápido ──────────────────────────────
+        # ── Período rápido – "Este Mês" é o padrão (index=0) ─────────────────
         st.sidebar.markdown("**Período Rápido**")
         periodo_rapido = st.sidebar.radio(
             "Selecione um atalho",
-            options=["Personalizado", "Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias"],
-            index=0,
+            options=[
+                "Este Mês",
+                "Últimos 7 dias",
+                "Últimos 15 dias",
+                "Últimos 30 dias",
+                "Personalizado",
+            ],
+            index=0,                    # ← "Este Mês" selecionado por padrão
             label_visibility="collapsed",
             horizontal=False,
         )
 
-        if periodo_rapido == "Últimos 7 dias":
+        # calcula periodo_value conforme atalho
+        if periodo_rapido == "Este Mês":
+            _ini_rapido = inicio_mes_atual.date()
+            _fim_rapido = ontem_sp.date()
+            _ini_rapido = max(_ini_rapido, data_min)
+            _fim_rapido = min(_fim_rapido, data_max)
+            periodo_value = (_ini_rapido, _fim_rapido)
+
+        elif periodo_rapido == "Últimos 7 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=6)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
+
         elif periodo_rapido == "Últimos 15 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=14)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
+
         elif periodo_rapido == "Últimos 30 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=29)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
-        else:
+
+        else:  # Personalizado
             periodo_value = (default_ini, default_fim)
 
-        periodo = st.sidebar.date_input(
-            "Período de Venda",
-            value=periodo_value,
-            min_value=data_min,
-            max_value=data_max,
-        )
+        # ── seletor de data apenas quando "Personalizado" ────────────────────
+        if periodo_rapido == "Personalizado":
+            periodo = st.sidebar.date_input(
+                "Período de Venda",
+                value=periodo_value,
+                min_value=data_min,
+                max_value=data_max,
+            )
+        else:
+            periodo = periodo_value
 
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
             data_ini = pd.Timestamp(periodo[0]).normalize()
@@ -803,6 +907,7 @@ try:
         marketplaces_sel=mkt_sel,
         marcas_sel=marca_sel,
         categorias_sel=categoria_sel,
+        fornecedores_sel=fornecedor_sel,    # ← NOVO
         incluir_devolucao=incluir_devolucao,
     )
 
@@ -857,18 +962,28 @@ try:
     # ──────────────────────────────────────────
     # 10. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
-    receita_total = df_f["Receita_Num"].sum()
-    liquido_total = df_f["Liquido_Num"].sum()
-    # ── CHANGE 5: custo médio → soma do custo total ───────────────────────────
-    custo_total = df_f["Custo_Num"].sum()
-    qtd_total = int(df_f["Qtd_Num"].sum())
-    total_pedidos = len(df_f)
+    receita_total    = df_f["Receita_Num"].sum()
+    liquido_total    = df_f["Liquido_Num"].sum()
+    custo_total      = df_f["Custo_Num"].sum()
+    qtd_total        = int(df_f["Qtd_Num"].sum())
+    total_pedidos    = len(df_f)
 
     receita_anterior = df_prev["Receita_Num"].sum()
     liquido_anterior = df_prev["Liquido_Num"].sum()
-    custo_anterior = df_prev["Custo_Num"].sum()
-    qtd_anterior = int(df_prev["Qtd_Num"].sum())
+    custo_anterior   = df_prev["Custo_Num"].sum()
+    qtd_anterior     = int(df_prev["Qtd_Num"].sum())
     pedidos_anterior = len(df_prev)
+
+    # ── NOVO: participação Lotes × Novos ─────────────────────────────────────
+    tem_fornecedor = "Fornecedor" in df_f.columns
+    if tem_fornecedor:
+        mask_lotes = df_f["Fornecedor"].apply(normalizar_texto) == "LOTES"
+        receita_lotes = df_f.loc[mask_lotes, "Receita_Num"].sum()
+        receita_novos = receita_total - receita_lotes
+        pct_lotes = (receita_lotes / receita_total * 100) if receita_total > 0 else 0.0
+        pct_novos = 100.0 - pct_lotes
+    else:
+        receita_lotes = receita_novos = pct_lotes = pct_novos = 0.0
 
     info_proj = calcular_status_e_projecao(
         data_ini=data_ini,
@@ -876,9 +991,8 @@ try:
         total_atual=receita_total
     )
 
+    # linha 1: Receita | Líquido | Custo
     linha1 = st.columns(3)
-    linha2 = st.columns(3)
-
     linha1[0].metric(
         "Receita Total",
         formatar_brl(receita_total),
@@ -889,15 +1003,15 @@ try:
         formatar_brl(liquido_total),
         calcular_delta_percentual(liquido_total, liquido_anterior)
     )
-    # Label atualizado para refletir a soma
     linha1[2].metric(
         "Custo Total",
         formatar_brl(custo_total),
         calcular_delta_percentual(custo_total, custo_anterior)
     )
 
+    # linha 2: Itens | Pedidos | Projeção
     rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
-    
+    linha2 = st.columns(3)
     linha2[0].metric(
         rotulo_itens,
         formatar_int(qtd_total),
@@ -935,6 +1049,22 @@ try:
         st.caption("O período selecionado está em um mês futuro.")
     else:
         linha2[2].metric("Projeção do Mês", "N/D")
+
+    # ── NOVO: linha 3 – Lotes × Novos ────────────────────────────────────────
+    if tem_fornecedor and not incluir_devolucao:
+        linha3 = st.columns(3)
+        linha3[0].metric(
+            "🔵 Lotes (origem incerta)",
+            formatar_brl(receita_lotes),
+            f"{pct_lotes:.1f}% da receita".replace(".", ","),
+        )
+        linha3[1].metric(
+            "🟢 Novos (origem confirmada)",
+            formatar_brl(receita_novos),
+            f"{pct_novos:.1f}% da receita".replace(".", ","),
+        )
+        # coluna vazia para manter alinhamento
+        linha3[2].empty()
 
     st.divider()
 
@@ -985,16 +1115,96 @@ try:
     else:
         st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
 
+    # ── NOVO: gráfico de fornecedores (colapsável) ────────────────────────────
+    if (
+        tem_fornecedor and
+        data_ini is not None and
+        data_fim is not None and
+        not df_grafico_base.empty
+    ):
+        with st.expander("▶ Vendas por Dia por Fornecedor", expanded=False):
+            df_atual_forn, df_anterior_forn, ini_ant_forn, fim_ant_forn = montar_df_fornecedor_diario(
+                df_base=df_grafico_base,
+                coluna_data="Dia_Grafico",
+                data_ini=data_ini,
+                data_fim=data_fim,
+                top_n_fornecedores=8,
+            )
+
+            if df_atual_forn.empty:
+                st.info("Sem dados de fornecedor para o período selecionado.")
+            else:
+                tab_forn_atual, tab_forn_anterior = st.tabs(
+                    ["Período Atual", "Período Anterior"]
+                )
+
+                with tab_forn_atual:
+                    chart_forn_atual = (
+                        alt.Chart(df_atual_forn)
+                        .mark_line(point=True, strokeWidth=2)
+                        .encode(
+                            x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
+                            y=alt.Y("Valor:Q", title="Receita (R$)"),
+                            color=alt.Color("Fornecedor:N", title="Fornecedor"),
+                            tooltip=[
+                                alt.Tooltip("Fornecedor:N", title="Fornecedor"),
+                                alt.Tooltip("Posicao_Label:O", title="Dia"),
+                                alt.Tooltip(
+                                    "Data_Original:T",
+                                    title="Data",
+                                    format="%d/%m/%Y",
+                                ),
+                                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+                            ],
+                        )
+                        .properties(height=340)
+                    )
+                    st.altair_chart(chart_forn_atual, use_container_width=True)
+                    st.caption(
+                        f"Período atual: {data_ini.strftime('%d/%m/%Y')} até "
+                        f"{data_fim.strftime('%d/%m/%Y')} | Top 8 fornecedores por receita"
+                    )
+
+                with tab_forn_anterior:
+                    if df_anterior_forn.empty:
+                        st.info("Sem dados para o período anterior.")
+                    else:
+                        chart_forn_ant = (
+                            alt.Chart(df_anterior_forn)
+                            .mark_line(point=True, strokeWidth=2)
+                            .encode(
+                                x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
+                                y=alt.Y("Valor:Q", title="Receita (R$)"),
+                                color=alt.Color("Fornecedor:N", title="Fornecedor"),
+                                tooltip=[
+                                    alt.Tooltip("Fornecedor:N", title="Fornecedor"),
+                                    alt.Tooltip("Posicao_Label:O", title="Dia"),
+                                    alt.Tooltip(
+                                        "Data_Original:T",
+                                        title="Data",
+                                        format="%d/%m/%Y",
+                                    ),
+                                    alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+                                ],
+                            )
+                            .properties(height=340)
+                        )
+                        st.altair_chart(chart_forn_ant, use_container_width=True)
+                        st.caption(
+                            f"Período anterior: {ini_ant_forn.strftime('%d/%m/%Y')} até "
+                            f"{fim_ant_forn.strftime('%d/%m/%Y')} | Top 8 fornecedores por receita do período atual"
+                        )
+
     st.divider()
 
     # ──────────────────────────────────────────
     # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Marketplace e Tipo de Pedido")
-    
+
     if not df_f.empty:
         filtro_mkt_ativo = bool(mkt_sel) and (not incluir_devolucao)
-    
+
         if filtro_mkt_ativo:
             df_mkt = (
                 df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
@@ -1002,7 +1212,7 @@ try:
                 .reset_index()
                 .rename(columns={"Receita_Num": "Receita"})
             )
-    
+
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
@@ -1025,7 +1235,7 @@ try:
                 .reset_index()
                 .rename(columns={"Receita_Num": "Receita"})
             )
-    
+
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
@@ -1039,15 +1249,18 @@ try:
                 )
                 .properties(height=380)
             )
-    
+
         st.altair_chart(chart_bar, use_container_width=True)
-    
+
         if incluir_devolucao:
             st.caption("Exibindo apenas pedidos de devolução.")
         elif filtro_mkt_ativo:
             st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
         else:
-            st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para detalhar por tipo de pedido.")
+            st.caption(
+                "Total por grupo de marketplace. Selecione marketplaces específicos "
+                "para detalhar por tipo de pedido."
+            )
     else:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
