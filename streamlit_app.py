@@ -580,7 +580,14 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
 
 
 # ── CHANGE 1: empty filter = select all ──────────────────────────────────────
-def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categorias_sel, incluir_devolucao):
+def aplicar_filtros_dimensionais(
+    df_base,
+    marketplaces_sel,
+    marcas_sel,
+    categorias_sel,
+    fornecedores_sel,
+    incluir_devolucao
+):
     """
     Regras:
     - toggle desligado: traz somente não devolução
@@ -601,6 +608,9 @@ def aplicar_filtros_dimensionais(df_base, marketplaces_sel, marcas_sel, categori
 
     if categorias_sel:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
+
+    if fornecedores_sel:
+        df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
     return df_out
 
@@ -730,7 +740,18 @@ try:
         )
     else:
         categoria_sel = []
-
+        
+    if "Fornecedor" in df.columns:
+        fornecedor_lista = sorted(df["Fornecedor"].dropna().unique())
+        fornecedor_sel = st.sidebar.multiselect(
+            "Fornecedor",
+            options=fornecedor_lista,
+            default=[],
+            placeholder="Todos os fornecedores",
+        )
+    else:
+        fornecedor_sel = []
+    
     datas_validas = df["Data_Emissao_Filtro"].dropna()
 
     hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
@@ -803,6 +824,7 @@ try:
         marketplaces_sel=mkt_sel,
         marcas_sel=marca_sel,
         categorias_sel=categoria_sel,
+        fornecedores_sel=fornecedor_sel,
         incluir_devolucao=incluir_devolucao,
     )
 
