@@ -531,7 +531,7 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
                 sort=["Período Atual", "Período Anterior"],
                 scale=alt.Scale(
                     domain=["Período Atual", "Período Anterior"],
-                    range=["#16a34a", "#fde68a"]
+                    range=["#16a34a", "#e8f9ee"]
                 ),
                 legend=alt.Legend(
                     orient="top",
