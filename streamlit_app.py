@@ -19,6 +19,7 @@ st.set_page_config(page_title="EmanxTelecom - Dashboard de Vendas", layout="wide
 # ──────────────────────────────────────────────
 url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
+LOGO_PATH = "assets/logo_emanx.png"
 
 # ──────────────────────────────────────────────
 # 3. CONEXÃO COM GOOGLE SHEETS
@@ -160,28 +161,31 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
         produto = html.escape(str(row["Produto"]))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
-        cols = st.columns([0.7, 1.3, 6.0, 2.7])
+        img_html = (
+            f'<img src="{row["img_url"]}" alt="{produto}">'
+            if row.get("img_url")
+            else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
+        )
 
-        cols[0].markdown(str(pos))
-
-        if row.get("img_url"):
-            cols[1].image(row["img_url"], width=60)
-        else:
-            cols[1].markdown("—")
-
-        cols[2].markdown(produto)
-
-        cols[3].markdown(
+        st.markdown(
             f"""
-            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-                <div>Receita: {formatar_brl(row["Receita"])}</div>
-                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                <div>{chip}</div>
+            <div class="ranking-card">
+                <div class="ranking-card-grid">
+                    <div class="ranking-pos">{pos}</div>
+                    <div class="ranking-img-wrap">{img_html}</div>
+                    <div>
+                        <div class="ranking-title">{produto}</div>
+                    </div>
+                    <div class="ranking-metrics">
+                        <div>Receita: {formatar_brl(row["Receita"])}</div>
+                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                        <div>{chip}</div>
+                    </div>
+                </div>
             </div>
             """,
             unsafe_allow_html=True
         )
-
 
 def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
     if df_rank.empty:
@@ -205,36 +209,33 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
         produto_destaque = html.escape(str(row.get("Produto_Destaque", "") or ""))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
-        cols = st.columns([0.7, 1.3, 6.0, 2.9])
+        img_html = (
+            f'<img src="{row["img_url_destaque"]}" alt="{nome_grupo}">'
+            if row.get("img_url_destaque")
+            else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
+        )
 
-        cols[0].markdown(str(pos))
+        subtitle_html = (
+            f'<div class="ranking-subtitle">Produto destaque: {produto_destaque}</div>'
+            if produto_destaque else ""
+        )
 
-        if row.get("img_url_destaque"):
-            cols[1].image(row["img_url_destaque"], width=60)
-        else:
-            cols[1].markdown("—")
-
-        if produto_destaque:
-            cols[2].markdown(
-                f"""
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <div style="font-size:1.08rem;">{nome_grupo}</div>
-                    <div style="font-size:0.9rem; color:#64748b;">
-                        Produto destaque: {produto_destaque}
+        st.markdown(
+            f"""
+            <div class="ranking-card">
+                <div class="ranking-card-grid">
+                    <div class="ranking-pos">{pos}</div>
+                    <div class="ranking-img-wrap">{img_html}</div>
+                    <div>
+                        <div class="ranking-title">{nome_grupo}</div>
+                        {subtitle_html}
+                    </div>
+                    <div class="ranking-metrics">
+                        <div>Receita: {formatar_brl(row["Receita"])}</div>
+                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                        <div>{chip}</div>
                     </div>
                 </div>
-                """,
-                unsafe_allow_html=True
-            )
-        else:
-            cols[2].markdown(nome_grupo)
-
-        cols[3].markdown(
-            f"""
-            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-                <div>Receita: {formatar_brl(row["Receita"])}</div>
-                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                <div>{chip}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -925,11 +926,17 @@ try:
     # ──────────────────────────────────────────
     # 8. CABEÇALHO
     # ──────────────────────────────────────────
-    st.title("EmanxTelecom - Dashboard de Performance de Vendas")
-    st.caption(
-        f"{len(df_f):,} linhas no detalhamento filtradas por Data emissao | "
-        f"Gráfico comparativo calculado por Data da Venda com fallback para Data emissao"
-    )
+    col_logo, col_titulo = st.columns([1.2, 4])
+    
+    with col_logo:
+        st.image(LOGO_PATH, width=220)
+    
+    with col_titulo:
+        st.title("Dashboard de Performance de Vendas")
+        st.caption(
+            f"{len(df_f):,} linhas no detalhamento filtradas por Data emissao | "
+            f"Gráfico comparativo calculado por Data da Venda com fallback para Data emissao"
+        )
 
     # ──────────────────────────────────────────
     # 9. CSS
@@ -949,6 +956,84 @@ try:
         div[data-testid="stMetricValue"] {
             font-size: 1.45rem;
             line-height: 1.15;
+        }
+    
+        .ranking-card {
+            border: 1px solid rgba(128,128,128,0.18);
+            border-radius: 16px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+            background: rgba(255,255,255,0.02);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+        }
+    
+        .ranking-card-grid {
+            display: grid;
+            grid-template-columns: 44px 72px minmax(0, 1fr) 170px;
+            gap: 12px;
+            align-items: center;
+        }
+    
+        .ranking-pos {
+            font-size: 1rem;
+            font-weight: 700;
+            text-align: center;
+        }
+    
+        .ranking-img-wrap {
+            width: 72px;
+            height: 72px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(0,0,0,0.04);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    
+        .ranking-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+    
+        .ranking-title {
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.25;
+            word-break: break-word;
+        }
+    
+        .ranking-subtitle {
+            font-size: 0.88rem;
+            color: #64748b;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+    
+        .ranking-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+        }
+    
+        @media (max-width: 768px) {
+            .ranking-card-grid {
+                grid-template-columns: 40px 64px 1fr;
+            }
+    
+            .ranking-metrics {
+                grid-column: 1 / -1;
+                margin-top: 6px;
+                padding-top: 8px;
+                border-top: 1px solid rgba(128,128,128,0.12);
+            }
+    
+            .ranking-img-wrap {
+                width: 64px;
+                height: 64px;
+            }
         }
         </style>
         """,
