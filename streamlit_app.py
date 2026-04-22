@@ -519,8 +519,18 @@ def periodo_anterior(data_ini, data_fim):
     return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
 
 def criar_grafico_comparativo(df_cmp: pd.DataFrame):
+    df_plot = df_cmp.copy()
+
+    ordem_series = ["Período Atual", "Período Anterior"]
+    df_plot["Serie"] = pd.Categorical(
+        df_plot["Serie"],
+        categories=ordem_series,
+        ordered=True
+    )
+    df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
+
     return (
-        alt.Chart(df_cmp)
+        alt.Chart(df_plot)
         .mark_line(point=True, strokeWidth=3)
         .encode(
             x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
@@ -528,20 +538,17 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
             color=alt.Color(
                 "Serie:N",
                 title="Série",
-                sort=["Período Atual", "Período Anterior"],
                 scale=alt.Scale(
-                    domain=["Período Atual", "Período Anterior"],
-                    range=["#16a34a", "#21ffad"]
+                    domain=ordem_series,
+                    range=["#4aa065", "#e8f9ee"]
                 ),
                 legend=alt.Legend(
                     orient="top",
                     direction="horizontal"
                 )
             ),
-            order=alt.Order(
-                "Serie:N",
-                sort="ascending"
-            ),
+            order=alt.Order("Ordem_Serie:Q", sort="ascending"),
+            detail="Serie:N",
             tooltip=[
                 alt.Tooltip("Serie:N", title="Série"),
                 alt.Tooltip("Posicao_Dia:Q", title="Posição"),
