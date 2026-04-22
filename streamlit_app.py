@@ -968,8 +968,8 @@ try:
             border-radius: 16px;
             padding: 12px 14px;
             margin-bottom: 12px;
-            background: rgba(255,255,255,0.02);
-            box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+            background: transparent;
+            box-shadow: none;
         }
     
         .ranking-card-grid {
@@ -990,7 +990,8 @@ try:
             height: 72px;
             border-radius: 12px;
             overflow: hidden;
-            background: rgba(0,0,0,0.04);
+            background: transparent;
+            border: 1px solid rgba(128,128,128,0.14);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1025,7 +1026,8 @@ try:
             white-space: nowrap;
             padding: 10px 12px;
             border-radius: 12px;
-            background: rgba(0,0,0,0.03);
+            background: transparent;
+            border: 1px solid rgba(128,128,128,0.14);
         }
     
         @media (max-width: 768px) {
@@ -1041,6 +1043,8 @@ try:
                 align-items: flex-start;
                 text-align: left;
                 white-space: normal;
+                background: transparent;
+                border: 1px solid rgba(128,128,128,0.14);
             }
     
             .ranking-img-wrap {
