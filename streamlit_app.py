@@ -839,9 +839,6 @@ try:
         if "periodo_rapido" not in st.session_state:
             st.session_state["periodo_rapido"] = "Mês Atual"
     
-        if "ultimo_periodo_rapido_aplicado" not in st.session_state:
-            st.session_state["ultimo_periodo_rapido_aplicado"] = None
-    
         if "periodo_datas" not in st.session_state:
             st.session_state["periodo_datas"] = (default_ini, default_fim)
     
@@ -855,31 +852,30 @@ try:
     
         if periodo_rapido == "Mês Atual":
             periodo_value = (default_ini, default_fim)
+            st.session_state["periodo_datas"] = periodo_value
         elif periodo_rapido == "Últimos 7 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=6)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
+            st.session_state["periodo_datas"] = periodo_value
         elif periodo_rapido == "Últimos 15 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=14)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
+            st.session_state["periodo_datas"] = periodo_value
         elif periodo_rapido == "Últimos 30 dias":
             _ini_rapido = (ontem_sp - pd.Timedelta(days=29)).date()
             _fim_rapido = ontem_sp.date()
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
             periodo_value = (_ini_rapido, _fim_rapido)
+            st.session_state["periodo_datas"] = periodo_value
         else:
             periodo_value = st.session_state["periodo_datas"]
-    
-        if periodo_rapido != "Personalizado":
-            if st.session_state["ultimo_periodo_rapido_aplicado"] != periodo_rapido:
-                st.session_state["periodo_datas"] = periodo_value
-                st.session_state["ultimo_periodo_rapido_aplicado"] = periodo_rapido
     
         periodo = st.sidebar.date_input(
             "Período de Venda",
