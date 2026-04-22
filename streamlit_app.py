@@ -540,7 +540,7 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
                 title="Série",
                 scale=alt.Scale(
                     domain=ordem_series,
-                    range=["#4aa065", "#e8f9ee"]
+                    range=["#4aa065", "#96cfa8"]
                 ),
                 legend=alt.Legend(
                     orient="top",
