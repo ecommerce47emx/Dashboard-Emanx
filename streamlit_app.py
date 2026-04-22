@@ -926,7 +926,7 @@ try:
     # ──────────────────────────────────────────
     # 8. CABEÇALHO
     # ──────────────────────────────────────────
-    col_logo, col_titulo = st.columns([1.2, 4])
+    col_logo, col_titulo = st.columns([0.8, 4.2])
     
     with col_logo:
         st.image(LOGO_PATH, width=180)
