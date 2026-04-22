@@ -929,7 +929,7 @@ try:
     col_logo, col_titulo = st.columns([1.2, 4])
     
     with col_logo:
-        st.image(LOGO_PATH, width=110)
+        st.image(LOGO_PATH, width=180)
     
     with col_titulo:
         st.title("Dashboard de Performance de Vendas")
