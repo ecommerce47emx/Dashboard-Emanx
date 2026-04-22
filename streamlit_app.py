@@ -974,7 +974,7 @@ try:
     
         .ranking-card-grid {
             display: grid;
-            grid-template-columns: 44px 72px minmax(0, 1fr) 170px;
+            grid-template-columns: 44px 72px minmax(0, 1fr) 220px;
             gap: 12px;
             align-items: center;
         }
@@ -1019,8 +1019,13 @@ try:
         .ranking-metrics {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-            align-items: flex-start;
+            gap: 8px;
+            align-items: flex-end;
+            text-align: right;
+            white-space: nowrap;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.03);
         }
     
         @media (max-width: 768px) {
@@ -1030,9 +1035,12 @@ try:
     
             .ranking-metrics {
                 grid-column: 1 / -1;
-                margin-top: 6px;
-                padding-top: 8px;
-                border-top: 1px solid rgba(128,128,128,0.12);
+                margin-top: 8px;
+                padding: 10px 12px;
+                border-top: none;
+                align-items: flex-start;
+                text-align: left;
+                white-space: normal;
             }
     
             .ranking-img-wrap {
