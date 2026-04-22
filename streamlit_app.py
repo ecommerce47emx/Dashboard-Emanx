@@ -158,7 +158,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
 
     for i, row in df_top.iterrows():
         pos = i + 1
-        produto = html.escape(str(row["Produto"]))
+        produto = html.escape(truncar_texto(row["Produto"], 65))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
         img_html = (
@@ -206,7 +206,7 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
     for i, row in df_top.iterrows():
         pos = i + 1
         nome_grupo = html.escape(str(row[campo_grupo]))
-        produto_destaque = html.escape(str(row.get("Produto_Destaque", "") or ""))
+        produto_destaque = html.escape(truncar_texto(row.get("Produto_Destaque", "") or "", 65))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
         img_html = (
@@ -303,6 +303,11 @@ def normalizar_texto(valor):
     txt = "".join(c for c in txt if not unicodedata.combining(c))
     return txt
 
+def truncar_texto(texto, limite=65):
+    if pd.isna(texto):
+        return ""
+    texto = str(texto).strip()
+    return texto if len(texto) <= limite else texto[:limite].rstrip() + "..."
 
 def parse_data_serie(series: pd.Series) -> pd.Series:
     """
