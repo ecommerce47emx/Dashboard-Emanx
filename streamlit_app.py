@@ -518,6 +518,39 @@ def periodo_anterior(data_ini, data_fim):
 
     return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
 
+def criar_grafico_comparativo(df_cmp: pd.DataFrame):
+    return (
+        alt.Chart(df_cmp)
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
+            y=alt.Y("Valor:Q", title="Receita (R$)"),
+            color=alt.Color(
+                "Serie:N",
+                title="Série",
+                sort=["Período Atual", "Período Anterior"],
+                scale=alt.Scale(
+                    domain=["Período Atual", "Período Anterior"],
+                    range=["#16a34a", "#fde68a"]
+                ),
+                legend=alt.Legend(
+                    orient="top",
+                    direction="horizontal"
+                )
+            ),
+            order=alt.Order(
+                "Serie:N",
+                sort="ascending"
+            ),
+            tooltip=[
+                alt.Tooltip("Serie:N", title="Série"),
+                alt.Tooltip("Posicao_Dia:Q", title="Posição"),
+                alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
+                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+            ],
+        )
+        .properties(height=320)
+    )
 
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
@@ -964,7 +997,7 @@ try:
     # 11. GRÁFICO: VENDAS POR DIA COM COMPARATIVO
     # ──────────────────────────────────────────
     st.subheader("Vendas por Dia com Comparativo do Período Anterior")
-
+    
     if (
         data_ini is not None and
         data_fim is not None and
@@ -979,26 +1012,11 @@ try:
             data_ini=data_ini,
             data_fim=data_fim,
         )
-
-        chart = (
-            alt.Chart(df_cmp)
-            .mark_line(point=True, strokeWidth=3)
-            .encode(
-                x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
-                y=alt.Y("Valor:Q", title="Receita (R$)"),
-                color=alt.Color("Serie:N", title="Série"),
-                tooltip=[
-                    alt.Tooltip("Serie:N", title="Série"),
-                    alt.Tooltip("Posicao_Dia:Q", title="Posição"),
-                    alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
-                    alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
-                ],
-            )
-            .properties(height=320)
-        )
-
+    
+        chart = criar_grafico_comparativo(df_cmp)
+    
         st.altair_chart(chart, use_container_width=True)
-
+    
         st.caption(
             f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
             f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
@@ -1006,7 +1024,7 @@ try:
         )
     else:
         st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
-
+    
     st.divider()
 
     # ──────────────────────────────────────────
