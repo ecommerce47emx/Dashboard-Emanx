@@ -1168,7 +1168,8 @@ try:
                 key=f"top_n_{campo}"
             )
 
-            subtab_receita, subtab_qtd = st.tabs(["Por Receita", "Por Quantidade Vendida"])
+            rotulo_qtd = "Por Quantidade Devolvida" if incluir_devolucao else "Por Quantidade Vendida"
+            subtab_receita, subtab_qtd = st.tabs(["Por Receita", rotulo_qtd])
 
             with subtab_receita:
                 if campo == "Produto":
