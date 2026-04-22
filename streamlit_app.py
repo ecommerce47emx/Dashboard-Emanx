@@ -508,11 +508,34 @@ def formatar_chip_delta(atual, anterior):
     """
 
 
-def periodo_anterior(data_ini, data_fim):
+def periodo_anterior(data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
 
     dias_periodo = (data_fim - data_ini).days + 1
+
+    # Para atalhos rápidos, mantém comparação por janela imediatamente anterior
+    if modo_periodo in ["Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias"]:
+        fim_anterior = data_ini - pd.Timedelta(days=1)
+        ini_anterior = fim_anterior - pd.Timedelta(days=dias_periodo - 1)
+        return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
+
+    # Para períodos dentro de um único mês, compara com os mesmos dias do mês anterior
+    if data_ini.year == data_fim.year and data_ini.month == data_fim.month:
+        primeiro_dia_mes_atual = data_ini.replace(day=1)
+        ultimo_dia_mes_anterior = primeiro_dia_mes_atual - pd.Timedelta(days=1)
+        primeiro_dia_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
+
+        dia_inicio_anterior = min(data_ini.day, ultimo_dia_mes_anterior.day)
+        dia_fim_anterior = min(data_fim.day, ultimo_dia_mes_anterior.day)
+
+        ini_anterior = primeiro_dia_mes_anterior + pd.Timedelta(days=dia_inicio_anterior - 1)
+        fim_anterior = primeiro_dia_mes_anterior + pd.Timedelta(days=dia_fim_anterior - 1)
+
+        dias_comparacao = (fim_anterior - ini_anterior).days + 1
+        return ini_anterior.normalize(), fim_anterior.normalize(), dias_comparacao
+
+    # Fallback para períodos personalizados maiores ou cruzando meses
     fim_anterior = data_ini - pd.Timedelta(days=1)
     ini_anterior = fim_anterior - pd.Timedelta(days=dias_periodo - 1)
 
@@ -654,11 +677,11 @@ def aplicar_filtros_dimensionais(
 
     return df_out
 
-def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim):
+def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
 
-    ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
+    ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim, modo_periodo)
 
     base_valida = df_base[df_base[coluna_data].notna()].copy()
 
@@ -870,7 +893,7 @@ try:
 
     if data_ini is not None and data_fim is not None:
         df_f = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
-        ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim)
+        ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim, periodo_rapido)
         df_prev = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", ini_ant, fim_ant)
     else:
         df_f = df_dim.copy()
@@ -1018,6 +1041,7 @@ try:
             coluna_valor="Receita_Num",
             data_ini=data_ini,
             data_fim=data_fim,
+            modo_periodo=periodo_rapido,
         )
     
         chart = criar_grafico_comparativo(df_cmp)
