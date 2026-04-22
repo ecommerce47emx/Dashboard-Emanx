@@ -35,6 +35,21 @@ def formatar_int(valor):
     except Exception:
         return "0"
 
+def formatar_titulo_ranking(texto, limite=65):
+    if pd.isna(texto):
+        return ""
+
+    txt = str(texto).strip().lower()
+    txt = " ".join(txt.split())
+    txt = txt.title()
+
+    if len(txt) > limite:
+        txt = txt[:limite].rstrip()
+        if " " in txt:
+            txt = txt.rsplit(" ", 1)[0]
+        txt += "..."
+
+    return html.escape(txt)
 
 def montar_ranking_produto(df_atual, df_anterior):
     if "Produto" not in df_atual.columns or df_atual.empty:
@@ -158,30 +173,35 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
 
     for i, row in df_top.iterrows():
         pos = i + 1
-        produto = html.escape(str(row["Produto"]))
+        produto = formatar_titulo_ranking(row["Produto"], limite=65)
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
-        img_html = (
-            f'<img src="{row["img_url"]}" alt="{produto}">'
-            if row.get("img_url")
-            else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
+        cols = st.columns([0.7, 1.3, 6.0, 2.7])
+
+        cols[0].markdown(str(pos))
+
+        if row.get("img_url"):
+            cols[1].image(row["img_url"], width=60)
+        else:
+            cols[1].markdown("—")
+
+        cols[2].markdown(
+            f"""
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                <div style="font-size:0.98rem; font-weight:600; line-height:1.25;">
+                    {produto}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
 
-        st.markdown(
+        cols[3].markdown(
             f"""
-            <div class="ranking-card">
-                <div class="ranking-card-grid">
-                    <div class="ranking-pos">{pos}</div>
-                    <div class="ranking-img-wrap">{img_html}</div>
-                    <div>
-                        <div class="ranking-title">{produto}</div>
-                    </div>
-                    <div class="ranking-metrics">
-                        <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                        <div>{chip}</div>
-                    </div>
-                </div>
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                <div>Receita: {formatar_brl(row["Receita"])}</div>
+                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                <div>{chip}</div>
             </div>
             """,
             unsafe_allow_html=True
@@ -205,37 +225,49 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
 
     for i, row in df_top.iterrows():
         pos = i + 1
-        nome_grupo = html.escape(str(row[campo_grupo]))
-        produto_destaque = html.escape(str(row.get("Produto_Destaque", "") or ""))
+        nome_grupo = formatar_titulo_ranking(row[campo_grupo], limite=65)
+        produto_destaque = formatar_titulo_ranking(row.get("Produto_Destaque", ""), limite=65)
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
-        img_html = (
-            f'<img src="{row["img_url_destaque"]}" alt="{nome_grupo}">'
-            if row.get("img_url_destaque")
-            else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
-        )
+        cols = st.columns([0.7, 1.3, 6.0, 2.9])
 
-        subtitle_html = (
-            f'<div class="ranking-subtitle">Produto destaque: {produto_destaque}</div>'
-            if produto_destaque else ""
-        )
+        cols[0].markdown(str(pos))
 
-        st.markdown(
-            f"""
-            <div class="ranking-card">
-                <div class="ranking-card-grid">
-                    <div class="ranking-pos">{pos}</div>
-                    <div class="ranking-img-wrap">{img_html}</div>
-                    <div>
-                        <div class="ranking-title">{nome_grupo}</div>
-                        {subtitle_html}
+        if row.get("img_url_destaque"):
+            cols[1].image(row["img_url_destaque"], width=60)
+        else:
+            cols[1].markdown("—")
+
+        if produto_destaque:
+            cols[2].markdown(
+                f"""
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                    <div style="font-size:0.98rem; font-weight:600; line-height:1.25;">
+                        {nome_grupo}
                     </div>
-                    <div class="ranking-metrics">
-                        <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                        <div>{chip}</div>
+                    <div style="font-size:0.84rem; color:#64748b; line-height:1.2;">
+                        Produto destaque: {produto_destaque}
                     </div>
                 </div>
+                """,
+                unsafe_allow_html=True
+            )
+        else:
+            cols[2].markdown(
+                f"""
+                <div style="font-size:0.98rem; font-weight:600; line-height:1.25;">
+                    {nome_grupo}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        cols[3].markdown(
+            f"""
+            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                <div>Receita: {formatar_brl(row["Receita"])}</div>
+                <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
+                <div>{chip}</div>
             </div>
             """,
             unsafe_allow_html=True
