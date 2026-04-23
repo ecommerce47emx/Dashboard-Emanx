@@ -55,26 +55,15 @@ def montar_ranking_produto(df_atual, df_anterior):
     if base_atual.empty:
         return pd.DataFrame()
 
-    if "SKU" in base_atual.columns:
-        rank_atual = (
-            base_atual.groupby("Produto", as_index=False)
-            .agg(
-                Receita=("Receita_Num", "sum"),
-                Quantidade=("Qtd_Num", "sum"),
-                img_url=("img_url", primeiro_valor_nao_vazio),
-                SKU=("SKU", primeiro_valor_nao_vazio),
-            )
+    rank_atual = (
+        base_atual.groupby("Produto", as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+            img_url=("img_url", primeiro_valor_nao_vazio),
+            SKU=("SKU", primeiro_valor_nao_vazio) if "SKU" in base_atual.columns else ("Produto", lambda x: ""),
         )
-    else:
-        rank_atual = (
-            base_atual.groupby("Produto", as_index=False)
-            .agg(
-                Receita=("Receita_Num", "sum"),
-                Quantidade=("Qtd_Num", "sum"),
-                img_url=("img_url", primeiro_valor_nao_vazio),
-            )
-        )
-        rank_atual["SKU"] = ""
+    )
 
     rank_anterior = (
         base_anterior.groupby("Produto", as_index=False)
@@ -87,6 +76,9 @@ def montar_ranking_produto(df_atual, df_anterior):
     df_rank = rank_atual.merge(rank_anterior, on="Produto", how="left")
     df_rank["Receita_Anterior"] = df_rank["Receita_Anterior"].fillna(0)
     df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
+
+    if "SKU" not in df_rank.columns:
+        df_rank["SKU"] = ""
 
     return df_rank
 
