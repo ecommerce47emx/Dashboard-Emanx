@@ -52,14 +52,29 @@ def montar_ranking_produto(df_atual, df_anterior):
         (df_anterior["Produto"].astype(str).str.strip() != "")
     ].copy()
 
-    rank_atual = (
-        base_atual.groupby("Produto", as_index=False)
-        .agg(
-            Receita=("Receita_Num", "sum"),
-            Quantidade=("Qtd_Num", "sum"),
-            img_url=("img_url", primeiro_valor_nao_vazio),
+    if base_atual.empty:
+        return pd.DataFrame()
+
+    if "SKU" in base_atual.columns:
+        rank_atual = (
+            base_atual.groupby("Produto", as_index=False)
+            .agg(
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
+                SKU=("SKU", primeiro_valor_nao_vazio),
+            )
         )
-    )
+    else:
+        rank_atual = (
+            base_atual.groupby("Produto", as_index=False)
+            .agg(
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
+            )
+        )
+        rank_atual["SKU"] = ""
 
     rank_anterior = (
         base_anterior.groupby("Produto", as_index=False)
@@ -161,12 +176,18 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
     for i, row in df_top.iterrows():
         pos = i + 1
         produto = html.escape(truncar_texto(row["Produto"], 65))
+        sku = html.escape(str(row.get("SKU", "") or ""))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
 
         img_html = (
             f'<img src="{row["img_url"]}" alt="{produto}">'
             if row.get("img_url")
             else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
+        )
+
+        subtitle_html = (
+            f'<div class="ranking-subtitle">SKU: {sku}</div>'
+            if sku else ""
         )
 
         st.markdown(
@@ -177,6 +198,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
                     <div class="ranking-img-wrap">{img_html}</div>
                     <div>
                         <div class="ranking-title">{produto}</div>
+                        {subtitle_html}
                     </div>
                     <div class="ranking-metrics">
                         <div>Receita: {formatar_brl(row["Receita"])}</div>
@@ -188,7 +210,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
             """,
             unsafe_allow_html=True
         )
-
+        
 def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
     if df_rank.empty:
         st.info("Sem dados para montar este ranking.")
