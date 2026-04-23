@@ -647,7 +647,7 @@ def montar_df_lotes_complementar(df_base, data_ini, data_fim):
 
 
 def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
-    ordem_series = ["Receita Lotes", "Receita Novos"]
+    ordem_series = ["Receita Novos", "Receita Lotes"]
 
     df_plot = df_plot.copy()
     df_plot["Serie"] = pd.Categorical(
@@ -1312,7 +1312,7 @@ try:
     
             st.caption(
                 f"Período analisado: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
-                f"Comparação diária entre Receita Lotes e Receita Novos"
+                f"Comparação diária entre Receita Novos e Receita Lotes"
             )
         else:
             st.info("Sem dados para exibir o gráfico de Lotes x Novos no período selecionado.")
