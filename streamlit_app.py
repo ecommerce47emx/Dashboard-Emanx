@@ -668,7 +668,7 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
                 title="Série",
                 scale=alt.Scale(
                     domain=ordem_series,
-                    range=["#4aa065", "#94a3b8"]
+                    range=["#94a3b8", "#4aa065"]
                 ),
                 legend=alt.Legend(
                     orient="top",
