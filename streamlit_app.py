@@ -1276,7 +1276,7 @@ try:
     
         chart = criar_grafico_comparativo(df_cmp)
     
-        st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, width="stretch")
     
         st.caption(
             f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
@@ -1308,7 +1308,7 @@ try:
     
         if not df_lotes_comp.empty:
             chart_lotes_comp = criar_grafico_lotes_complementar(df_lotes_comp)
-            st.altair_chart(chart_lotes_comp, use_container_width=True)
+            st.altair_chart(chart_lotes_comp, width="stretch")
     
             st.caption(
                 f"Período analisado: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
@@ -1372,7 +1372,7 @@ try:
                 .properties(height=380)
             )
     
-        st.altair_chart(chart_bar, use_container_width=True)
+        st.altair_chart(chart_bar, width="stretch")
     
         if incluir_devolucao:
             st.caption("Exibindo apenas pedidos de devolução.")
@@ -1422,7 +1422,7 @@ try:
                 .properties(height=max(320, min(900, len(df_fornecedor) * 28)))
             )
     
-            st.altair_chart(chart_fornecedor, use_container_width=True)
+            st.altair_chart(chart_fornecedor, width="stretch")
         
     # ──────────────────────────────────────────
     # 13. RANKINGS
@@ -1514,7 +1514,7 @@ try:
         ]
 
         colunas_exibir = [c for c in colunas_base if c in df_f.columns]
-        st.dataframe(df_f[colunas_exibir], use_container_width=True)
+        st.dataframe(df_f[colunas_exibir], width="stretch")
 
 except Exception as e:
     st.error(f"Não foi possível carregar os dados: {e}")
