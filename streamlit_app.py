@@ -17,7 +17,7 @@ st.set_page_config(page_title="EmanxTelecom - Dashboard de Vendas", layout="wide
 # ──────────────────────────────────────────────
 # 2. URL DA PLANILHA
 # ──────────────────────────────────────────────
-url_planilha = "https://docs.google.com/spreadsheets/d/1wO3-to-_TjdYUsT9qN9TEyXg7A6dOtuy0RRa79usVTk/edit?gid=1603417773#gid=1603417773"
+url_planilha = st.secrets["GSHEET_URL"]
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 LOGO_PATH = "assets/LogoEmanx-BW.png"
 
