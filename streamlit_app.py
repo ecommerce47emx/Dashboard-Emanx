@@ -1074,29 +1074,41 @@ try:
             gap: 12px;
             align-items: center;
         }
-    
-        .ranking-pos {
-            font-size: 1rem;
-            font-weight: 700;
-            text-align: center;
-        }
-    
-        .ranking-img-wrap {
-            width: 72px;
-            height: 72px;
+        
+        .ranking-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            align-items: flex-end;
+            text-align: right;
+            white-space: nowrap;
+            padding: 10px 12px;
             border-radius: 12px;
-            overflow: hidden;
             background: transparent;
             border: 1px solid rgba(128,128,128,0.14);
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
-    
-        .ranking-img-wrap img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
+        
+        @media (max-width: 768px) {
+            .ranking-card-grid {
+                grid-template-columns: 40px 64px 1fr;
+            }
+        
+            .ranking-metrics {
+                grid-column: 1 / -1;
+                margin-top: 8px;
+                padding: 10px 12px;
+                border-top: none;
+                align-items: flex-start;
+                text-align: left;
+                white-space: normal;
+                background: transparent;
+                border: 1px solid rgba(128,128,128,0.14);
+            }
+        
+            .ranking-img-wrap {
+                width: 64px;
+                height: 64px;
+            }
         }
     
         .ranking-title {
