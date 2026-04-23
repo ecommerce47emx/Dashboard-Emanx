@@ -591,7 +591,101 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
         )
         .properties(height=320)
     )
+def montar_df_lotes_complementar(df_base, data_ini, data_fim):
+    base_valida = df_base[
+        df_base["Dia_Grafico"].notna()
+    ].copy()
 
+    base_periodo = filtrar_intervalo(base_valida, "Dia_Grafico", data_ini, data_fim)
+
+    if base_periodo.empty:
+        return pd.DataFrame()
+
+    datas_periodo = pd.date_range(
+        pd.Timestamp(data_ini).normalize(),
+        pd.Timestamp(data_fim).normalize(),
+        freq="D"
+    )
+
+    total_dia = (
+        base_periodo.groupby("Dia_Grafico", as_index=True)["Receita_Num"]
+        .sum()
+        .reindex(datas_periodo, fill_value=0)
+    )
+
+    if "Fornecedor" in base_periodo.columns:
+        lotes_dia = (
+            base_periodo[
+                base_periodo["Fornecedor"].apply(normalizar_texto) == "LOTES"
+            ]
+            .groupby("Dia_Grafico", as_index=True)["Receita_Num"]
+            .sum()
+            .reindex(datas_periodo, fill_value=0)
+        )
+    else:
+        lotes_dia = pd.Series(0, index=datas_periodo, dtype="float64")
+
+    complementar_dia = total_dia - lotes_dia
+
+    df_lotes = pd.DataFrame({
+        "Data_Original": datas_periodo,
+        "Valor": lotes_dia.values,
+        "Serie": "Receita Lotes"
+    })
+
+    df_comp = pd.DataFrame({
+        "Data_Original": datas_periodo,
+        "Valor": complementar_dia.values,
+        "Serie": "Receita Novos"
+    })
+
+    df_plot = pd.concat([df_lotes, df_comp], ignore_index=True)
+    df_plot["Posicao_Dia"] = df_plot.groupby("Serie").cumcount() + 1
+    df_plot["Posicao_Label"] = df_plot["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
+
+    return df_plot
+
+
+def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
+    ordem_series = ["Receita Lotes", "Receita Novos"]
+
+    df_plot = df_plot.copy()
+    df_plot["Serie"] = pd.Categorical(
+        df_plot["Serie"],
+        categories=ordem_series,
+        ordered=True
+    )
+    df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
+
+    return (
+        alt.Chart(df_plot)
+        .mark_line(point=True, strokeWidth=3)
+        .encode(
+            x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
+            y=alt.Y("Valor:Q", title="Receita (R$)"),
+            color=alt.Color(
+                "Serie:N",
+                title="Série",
+                scale=alt.Scale(
+                    domain=ordem_series,
+                    range=["#4aa065", "#94a3b8"]
+                ),
+                legend=alt.Legend(
+                    orient="top",
+                    direction="horizontal"
+                )
+            ),
+            order=alt.Order("Ordem_Serie:Q", sort="ascending"),
+            detail="Serie:N",
+            tooltip=[
+                alt.Tooltip("Serie:N", title="Série"),
+                alt.Tooltip("Posicao_Dia:Q", title="Posição"),
+                alt.Tooltip("Data_Original:T", title="Data", format="%d/%m/%Y"),
+                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+            ],
+        )
+        .properties(height=320)
+    )
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
         return df_base.iloc[0:0].copy()
@@ -1193,6 +1287,37 @@ try:
         st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
     
     st.divider()
+
+    # ──────────────────────────────────────────
+    # 11.1 GRÁFICO: LOTES X NOVOS
+    # ──────────────────────────────────────────
+    st.subheader("Receita Lotes x Receita Novos por Dia")
+    
+    if (
+        data_ini is not None and
+        data_fim is not None and
+        not df_grafico_base.empty and
+        "Dia_Grafico" in df_grafico_base.columns and
+        df_grafico_base["Dia_Grafico"].notna().any()
+    ):
+        df_lotes_comp = montar_df_lotes_complementar(
+            df_base=df_grafico_base,
+            data_ini=data_ini,
+            data_fim=data_fim,
+        )
+    
+        if not df_lotes_comp.empty:
+            chart_lotes_comp = criar_grafico_lotes_complementar(df_lotes_comp)
+            st.altair_chart(chart_lotes_comp, use_container_width=True)
+    
+            st.caption(
+                f"Período analisado: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
+                f"Comparação diária entre Receita Lotes e Receita Novos"
+            )
+        else:
+            st.info("Sem dados para exibir o gráfico de Lotes x Novos no período selecionado.")
+    else:
+        st.info("Sem dados válidos para exibir o gráfico de Lotes x Novos.")
 
     # ──────────────────────────────────────────
     # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
