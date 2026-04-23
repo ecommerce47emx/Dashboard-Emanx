@@ -1058,11 +1058,10 @@ try:
         """,
         unsafe_allow_html=True
     )
-
+    
     # ──────────────────────────────────────────
     # 10. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
-
     receita_total = df_f["Receita_Num"].sum()
     liquido_total = df_f["Liquido_Num"].sum()
     custo_total = df_f["Custo_Num"].sum()
@@ -1084,13 +1083,15 @@ try:
         receita_lotes = 0.0
     
     pct_receita_lotes = (receita_lotes / receita_total) if receita_total > 0 else 0.0
-    pct_complementar = 1 - pct_receita_lotes if receita_total > 0 else 0.0
+    pct_receita_complementar = 1 - pct_receita_lotes if receita_total > 0 else 0.0
     
     info_proj = calcular_status_e_projecao(
         data_ini=data_ini,
         data_fim=data_fim,
         total_atual=receita_total
     )
+    
+    rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
     
     linha1 = st.columns(4)
     linha2 = st.columns(4)
@@ -1101,36 +1102,42 @@ try:
         calcular_delta_percentual(receita_total, receita_anterior)
     )
     linha1[1].metric(
-        "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos",
-        formatar_int(qtd_total),
-        calcular_delta_percentual(qtd_total, qtd_anterior)
-    )
-    linha1[2].metric(
         "Líquido Total",
         formatar_brl(liquido_total),
         calcular_delta_percentual(liquido_total, liquido_anterior)
     )
+    linha1[2].metric(
+        "Custo Total",
+        formatar_brl(custo_total),
+        calcular_delta_percentual(custo_total, custo_anterior)
+    )
     linha1[3].metric(
+        "Receita Novos",
+        formatar_pct(pct_receita_complementar)
+    )
+    
+    linha2[0].metric(
+        rotulo_itens,
+        formatar_int(qtd_total),
+        calcular_delta_percentual(qtd_total, qtd_anterior)
+    )
+    linha2[1].metric(
         "Total de Pedidos",
         formatar_int(total_pedidos),
         calcular_delta_percentual(total_pedidos, pedidos_anterior)
     )
     
-    linha2[0].metric(
-        "Custo Total",
-        formatar_brl(custo_total),
-        calcular_delta_percentual(custo_total, custo_anterior)
-    )
-    
     if info_proj["status"] == "em_andamento":
-        linha2[1].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
+        linha2[2].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
     elif info_proj["status"] == "finalizado":
-        linha2[1].metric("Projeção do Mês", "Mês finalizado")
+        linha2[2].metric("Projeção do Mês", "Mês finalizado")
     else:
-        linha2[1].metric("Projeção do Mês", "N/D")
+        linha2[2].metric("Projeção do Mês", "N/D")
     
-    linha2[2].metric("% Receita Lotes", formatar_pct(pct_receita_lotes))
-    linha2[3].metric("% Receita Novos", formatar_pct(pct_complementar))
+    linha2[3].metric(
+        "Receita Lotes",
+        formatar_pct(pct_receita_lotes)
+    )
     
     if info_proj["status"] == "em_andamento":
         st.caption(
