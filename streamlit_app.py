@@ -1384,6 +1384,47 @@ try:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
     # ──────────────────────────────────────────
+    # 12.1 GRÁFICO: FATURAMENTO POR FORNECEDOR
+    # ──────────────────────────────────────────
+    st.subheader("Faturamento por Fornecedor")
+    
+    if "Fornecedor" not in df_f.columns:
+        st.info("Coluna 'Fornecedor' não encontrada para exibir o gráfico.")
+    elif df_f.empty:
+        st.info("Sem dados para exibir o faturamento por fornecedor.")
+    else:
+        df_fornecedor = (
+            df_f[
+                df_f["Fornecedor"].notna() &
+                (df_f["Fornecedor"].astype(str).str.strip() != "")
+            ]
+            .groupby("Fornecedor")["Receita_Num"]
+            .sum()
+            .reset_index()
+            .rename(columns={"Receita_Num": "Receita"})
+            .sort_values("Receita", ascending=True).head(20)
+        )
+    
+        if df_fornecedor.empty:
+            st.info("Sem dados válidos de fornecedor para exibir o gráfico.")
+        else:
+            chart_fornecedor = (
+                alt.Chart(df_fornecedor)
+                .mark_bar()
+                .encode(
+                    y=alt.Y("Fornecedor:N", title="Fornecedor", sort="-x"),
+                    x=alt.X("Receita:Q", title="Receita (R$)"),
+                    tooltip=[
+                        alt.Tooltip("Fornecedor:N", title="Fornecedor"),
+                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                    ],
+                )
+                .properties(height=max(320, min(900, len(df_fornecedor) * 28)))
+            )
+    
+            st.altair_chart(chart_fornecedor, use_container_width=True)
+        
+    # ──────────────────────────────────────────
     # 13. RANKINGS
     # ──────────────────────────────────────────
     st.subheader("Rankings")
