@@ -35,6 +35,8 @@ def formatar_int(valor):
     except Exception:
         return "0"
 
+def formatar_pct(valor):
+    return f"{valor * 100:.1f}%".replace(".", ",")
 
 def montar_ranking_produto(df_atual, df_anterior):
     if "Produto" not in df_atual.columns or df_atual.empty:
@@ -1060,86 +1062,95 @@ try:
     # ──────────────────────────────────────────
     # 10. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
+
     receita_total = df_f["Receita_Num"].sum()
     liquido_total = df_f["Liquido_Num"].sum()
-    # ── CHANGE 5: custo médio → soma do custo total ───────────────────────────
     custo_total = df_f["Custo_Num"].sum()
     qtd_total = int(df_f["Qtd_Num"].sum())
     total_pedidos = len(df_f)
-
+    
     receita_anterior = df_prev["Receita_Num"].sum()
     liquido_anterior = df_prev["Liquido_Num"].sum()
     custo_anterior = df_prev["Custo_Num"].sum()
     qtd_anterior = int(df_prev["Qtd_Num"].sum())
     pedidos_anterior = len(df_prev)
-
+    
+    if "Fornecedor" in df_f.columns:
+        receita_lotes = df_f.loc[
+            df_f["Fornecedor"].apply(normalizar_texto) == "LOTES",
+            "Receita_Num"
+        ].sum()
+    else:
+        receita_lotes = 0.0
+    
+    pct_receita_lotes = (receita_lotes / receita_total) if receita_total > 0 else 0.0
+    pct_complementar = 1 - pct_receita_lotes if receita_total > 0 else 0.0
+    
     info_proj = calcular_status_e_projecao(
         data_ini=data_ini,
         data_fim=data_fim,
         total_atual=receita_total
     )
-
-    linha1 = st.columns(3)
-    linha2 = st.columns(3)
-
+    
+    linha1 = st.columns(4)
+    linha2 = st.columns(4)
+    
     linha1[0].metric(
         "Receita Total",
         formatar_brl(receita_total),
         calcular_delta_percentual(receita_total, receita_anterior)
     )
     linha1[1].metric(
+        "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos",
+        formatar_int(qtd_total),
+        calcular_delta_percentual(qtd_total, qtd_anterior)
+    )
+    linha1[2].metric(
         "Líquido Total",
         formatar_brl(liquido_total),
         calcular_delta_percentual(liquido_total, liquido_anterior)
     )
-    # Label atualizado para refletir a soma
-    linha1[2].metric(
+    linha1[3].metric(
+        "Total de Pedidos",
+        formatar_int(total_pedidos),
+        calcular_delta_percentual(total_pedidos, pedidos_anterior)
+    )
+    
+    linha2[0].metric(
         "Custo Total",
         formatar_brl(custo_total),
         calcular_delta_percentual(custo_total, custo_anterior)
     )
-
-    rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
     
-    linha2[0].metric(
-        rotulo_itens,
-        formatar_int(qtd_total),
-        calcular_delta_percentual(qtd_total, qtd_anterior)
-    )
-    linha2[1].metric(
-        "Total de Pedidos",
-        f"{total_pedidos:,}",
-        calcular_delta_percentual(total_pedidos, pedidos_anterior)
-    )
-
     if info_proj["status"] == "em_andamento":
-        linha2[2].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
+        linha2[1].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
+    elif info_proj["status"] == "finalizado":
+        linha2[1].metric("Projeção do Mês", "Mês finalizado")
+    else:
+        linha2[1].metric("Projeção do Mês", "N/D")
+    
+    linha2[2].metric("% Receita Lotes", formatar_pct(pct_receita_lotes))
+    linha2[3].metric("% Receita Novos", formatar_pct(pct_complementar))
+    
+    if info_proj["status"] == "em_andamento":
         st.caption(
             f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
             f"Projeção mensal: {info_proj['dias_passados']} dias passados, "
             f"{info_proj['dias_restantes']} restantes, total de {info_proj['dias_mes']} dias."
         )
     elif info_proj["status"] == "finalizado":
-        linha2[2].metric("Projeção do Mês", "Mês finalizado")
         st.caption(
             f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
         )
     elif info_proj["status"] == "intervalo_parcial":
-        linha2[2].metric("Projeção do Mês", "N/D")
         st.caption(
             f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
             f"Para projetar o mês atual, o filtro precisa cobrir o mês desde o dia 1 até ontem."
         )
     elif info_proj["status"] == "multiplos_meses":
-        linha2[2].metric("Projeção do Mês", "N/D")
         st.caption("A projeção mensal funciona apenas quando o filtro está dentro de um único mês.")
     elif info_proj["status"] == "futuro":
-        linha2[2].metric("Projeção do Mês", "N/D")
         st.caption("O período selecionado está em um mês futuro.")
-    else:
-        linha2[2].metric("Projeção do Mês", "N/D")
-
-    st.divider()
 
     # ──────────────────────────────────────────
     # 11. GRÁFICO: VENDAS POR DIA COM COMPARATIVO
