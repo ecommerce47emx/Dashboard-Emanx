@@ -1394,6 +1394,14 @@ try:
                 .tolist()
             )
             
+            ordem_tipo_pedido = (
+                df_mkt.groupby("Tipo pedido", as_index=False)
+                .agg(Receita_Total_Tipo=("Receita", "sum"))
+                .sort_values("Receita_Total_Tipo", ascending=False)
+                ["Tipo pedido"]
+                .tolist()
+            )
+            
             df_mkt["Ordem_Tipo_Pedido"] = (
                 df_mkt.groupby("Grupo de Marketplace")["Receita"]
                 .rank(method="first", ascending=False)
@@ -1415,7 +1423,8 @@ try:
                     ),
                     color=alt.Color(
                         "Tipo pedido:N",
-                        title="Tipo de Pedido"
+                        title="Tipo de Pedido",
+                        scale=alt.Scale(domain=ordem_tipo_pedido)
                     ),
                     order=alt.Order(
                         "Ordem_Tipo_Pedido:Q",
