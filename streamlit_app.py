@@ -1262,7 +1262,7 @@ try:
             display: flex;
             flex-direction: row;
             gap: 6px;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
             flex-wrap: nowrap;
             white-space: nowrap;
