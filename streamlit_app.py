@@ -1372,44 +1372,76 @@ try:
     
         if filtro_mkt_ativo:
             df_mkt = (
-                df_f.groupby(["Grupo de Marketplace", "Tipo pedido"])["Receita_Num"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Receita_Num": "Receita"})
+                df_f.groupby(["Grupo de Marketplace", "Tipo pedido"], as_index=False)
+                .agg(Receita=("Receita_Num", "sum"))
+            )
+    
+            receita_total_mkt = (
+                df_mkt.groupby("Grupo de Marketplace", as_index=False)
+                .agg(Receita_Total=("Receita", "sum"))
+                .sort_values("Receita_Total", ascending=False)
+            )
+    
+            ordem_marketplace = receita_total_mkt["Grupo de Marketplace"].tolist()
+    
+            df_mkt = df_mkt.merge(
+                receita_total_mkt,
+                on="Grupo de Marketplace",
+                how="left"
             )
     
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
                 .encode(
-                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort="-x"),
-                    x=alt.X("Receita:Q", title="Receita (R$)"),
-                    color=alt.Color("Tipo pedido:N", title="Tipo"),
-                    tooltip=[
+                    y=alt.Y(
                         "Grupo de Marketplace:N",
+                        title="Marketplace",
+                        sort=ordem_marketplace
+                    ),
+                    x=alt.X(
+                        "Receita:Q",
+                        title="Receita (R$)"
+                    ),
+                    color=alt.Color(
                         "Tipo pedido:N",
-                        alt.Tooltip("Receita:Q", format=",.2f"),
+                        title="Tipo de Pedido"
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
+                        alt.Tooltip("Tipo pedido:N", title="Tipo de Pedido"),
+                        alt.Tooltip("Receita:Q", title="Receita do Tipo", format=",.2f"),
+                        alt.Tooltip("Receita_Total:Q", title="Receita Total Marketplace", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
             )
+    
         else:
             df_mkt = (
-                df_f.groupby("Grupo de Marketplace")["Receita_Num"]
-                .sum()
-                .reset_index()
-                .rename(columns={"Receita_Num": "Receita"})
+                df_f.groupby("Grupo de Marketplace", as_index=False)
+                .agg(Receita=("Receita_Num", "sum"))
+                .sort_values("Receita", ascending=False)
             )
+    
+            ordem_marketplace = df_mkt["Grupo de Marketplace"].tolist()
     
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
                 .encode(
-                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort="-x"),
-                    x=alt.X("Receita:Q", title="Receita (R$)"),
-                    tooltip=[
+                    y=alt.Y(
                         "Grupo de Marketplace:N",
-                        alt.Tooltip("Receita:Q", format=",.2f"),
+                        title="Marketplace",
+                        sort=ordem_marketplace
+                    ),
+                    x=alt.X(
+                        "Receita:Q",
+                        title="Receita (R$)"
+                    ),
+                    tooltip=[
+                        alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
+                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
@@ -1420,7 +1452,7 @@ try:
         if incluir_devolucao:
             st.caption("Exibindo apenas pedidos de devolução.")
         elif filtro_mkt_ativo:
-            st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
+            st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo. Marketplaces ordenados por maior receita total.")
         else:
             st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para detalhar por tipo de pedido.")
     else:
