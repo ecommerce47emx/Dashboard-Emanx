@@ -1180,7 +1180,7 @@ try:
     
         .ranking-card-grid {
             display: grid;
-            grid-template-columns: 44px 72px minmax(0, 1fr) 340px;
+            grid-template-columns: 44px 72px minmax(0, 1fr) 250px;
             gap: 12px;
             align-items: center;
         }
@@ -1225,6 +1225,9 @@ try:
             word-break: break-word;
         }
     
+        /* ──────────────────────────────────────────────
+           CAIXA DE MÉTRICAS DO RANKING
+        ────────────────────────────────────────────── */
         .ranking-metrics {
             display: flex;
             flex-direction: column;
@@ -1236,33 +1239,48 @@ try:
             border-radius: 12px;
             background: transparent;
             border: 1px solid rgba(128,128,128,0.14);
+            width: 250px;
+            max-width: 250px;
+            justify-self: end;
             min-width: 0;
+            box-sizing: border-box;
+        }
+    
+        .ranking-metrics > div:not(.ranking-chips-row) {
+            width: 100%;
+            text-align: right;
         }
     
         .ranking-metrics strong {
             font-weight: 700;
         }
     
+        /* ──────────────────────────────────────────────
+           CHIPS DE MARGEM E VARIAÇÃO
+        ────────────────────────────────────────────── */
         .ranking-chips-row {
             display: flex;
             flex-direction: row;
-            gap: 8px;
-            justify-content: flex-end;
+            gap: 6px;
+            justify-content: center;
             align-items: center;
             flex-wrap: nowrap;
             white-space: nowrap;
             width: 100%;
+            text-align: center;
+            align-self: center;
         }
     
         .ranking-chip {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 4px 10px;
+            padding: 4px 7px;
             border-radius: 999px;
-            font-size: 0.85rem;
+            font-size: 0.74rem;
             line-height: 1.2;
             white-space: nowrap;
+            box-sizing: border-box;
         }
     
         /* ──────────────────────────────────────────────
@@ -1270,12 +1288,12 @@ try:
         ────────────────────────────────────────────── */
         @media (max-width: 1100px) {
             .ranking-card-grid {
-                grid-template-columns: 44px 72px minmax(0, 1fr) 300px;
+                grid-template-columns: 44px 72px minmax(0, 1fr) 250px;
             }
     
             .ranking-chip {
-                font-size: 0.8rem;
-                padding: 4px 8px;
+                font-size: 0.72rem;
+                padding: 4px 6px;
             }
         }
     
@@ -1292,14 +1310,20 @@ try:
             .ranking-metrics {
                 grid-column: 1 / -1;
                 margin-top: 8px;
-                align-items: flex-start;
-                text-align: left;
-                white-space: normal;
                 width: 100%;
+                max-width: 100%;
+                justify-self: stretch;
+                align-items: flex-end;
+                text-align: right;
+                white-space: normal;
+            }
+    
+            .ranking-metrics > div:not(.ranking-chips-row) {
+                text-align: right;
             }
     
             .ranking-chips-row {
-                justify-content: flex-start;
+                justify-content: center;
                 flex-wrap: wrap;
                 white-space: normal;
             }
@@ -1336,11 +1360,22 @@ try:
             .ranking-metrics {
                 padding: 10px;
                 gap: 7px;
+                align-items: flex-end;
+                text-align: right;
+            }
+    
+            .ranking-metrics > div:not(.ranking-chips-row) {
+                text-align: right;
+            }
+    
+            .ranking-chips-row {
+                justify-content: center;
+                flex-wrap: wrap;
             }
     
             .ranking-chip {
-                font-size: 0.78rem;
-                padding: 4px 8px;
+                font-size: 0.72rem;
+                padding: 4px 6px;
             }
         }
         </style>
