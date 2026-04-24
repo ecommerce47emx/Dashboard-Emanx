@@ -21,6 +21,26 @@ url_planilha = st.secrets["GSHEET_URL"]
 BASE_IMG_URL = "https://emanxtelecom.com.br/imagens/"
 LOGO_PATH = "assets/LogoEmanx-BW.png"
 
+MARKETPLACE_ORDEM_CORES = [
+    "MERCADO LIVRE",
+    "AMAZON",
+    "SHOPEE",
+    "CASAS BAHIA",
+    "MAGALU",
+    "TIKTOK",
+    "MANUAL",
+]
+
+MARKETPLACE_CORES = [
+    "#2563eb",  # MERCADO LIVRE
+    "#f97316",  # AMAZON
+    "#ef4444",  # SHOPEE
+    "#7c3aed",  # CASAS BAHIA
+    "#06b6d4",  # MAGALU
+    "#ec4899",  # TIKTOK
+    "#64748b",  # MANUAL
+]
+
 # ──────────────────────────────────────────────
 # 3. CONEXÃO COM GOOGLE SHEETS
 # ──────────────────────────────────────────────
@@ -1633,9 +1653,9 @@ try:
                 .agg(Receita=("Receita_Num", "sum"))
                 .sort_values("Receita", ascending=False)
             )
-    
+        
             ordem_marketplace = df_mkt["Grupo de Marketplace"].tolist()
-    
+        
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
@@ -1648,6 +1668,18 @@ try:
                     x=alt.X(
                         "Receita:Q",
                         title="Receita (R$)"
+                    ),
+                    color=alt.Color(
+                        "Grupo de Marketplace:N",
+                        title="Marketplace",
+                        scale=alt.Scale(
+                            domain=MARKETPLACE_ORDEM_CORES,
+                            range=MARKETPLACE_CORES
+                        ),
+                        legend=alt.Legend(
+                            orient="top",
+                            direction="horizontal"
+                        )
                     ),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
