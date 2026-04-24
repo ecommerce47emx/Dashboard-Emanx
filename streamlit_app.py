@@ -1339,11 +1339,11 @@ try:
             }
     
             .ranking-metrics > div:not(.ranking-chips-row) {
-                text-align: right;
+                text-align: left;
             }
     
             .ranking-chips-row {
-                justify-content: space-between;
+                justify-content: left;
                 flex-wrap: wrap;
                 white-space: normal;
             }
