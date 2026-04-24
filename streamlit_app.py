@@ -1375,21 +1375,30 @@ try:
                 df_f.groupby(["Grupo de Marketplace", "Tipo pedido"], as_index=False)
                 .agg(Receita=("Receita_Num", "sum"))
             )
-    
-            receita_total_mkt = (
-                df_mkt.groupby("Grupo de Marketplace", as_index=False)
-                .agg(Receita_Total=("Receita", "sum"))
-                .sort_values("Receita_Total", ascending=False)
+            
+            df_mkt["Receita_Total_Marketplace"] = (
+                df_mkt.groupby("Grupo de Marketplace")["Receita"]
+                .transform("sum")
             )
-    
-            ordem_marketplace = receita_total_mkt["Grupo de Marketplace"].tolist()
-    
-            df_mkt = df_mkt.merge(
-                receita_total_mkt,
-                on="Grupo de Marketplace",
-                how="left"
+            
+            df_mkt = df_mkt.sort_values(
+                by=["Receita_Total_Marketplace", "Receita"],
+                ascending=[False, False]
             )
-    
+            
+            ordem_marketplace = (
+                df_mkt[["Grupo de Marketplace", "Receita_Total_Marketplace"]]
+                .drop_duplicates()
+                .sort_values("Receita_Total_Marketplace", ascending=False)
+                ["Grupo de Marketplace"]
+                .tolist()
+            )
+            
+            df_mkt["Ordem_Tipo_Pedido"] = (
+                df_mkt.groupby("Grupo de Marketplace")["Receita"]
+                .rank(method="first", ascending=False)
+            )
+            
             chart_bar = (
                 alt.Chart(df_mkt)
                 .mark_bar()
@@ -1401,17 +1410,22 @@ try:
                     ),
                     x=alt.X(
                         "Receita:Q",
-                        title="Receita (R$)"
+                        title="Receita (R$)",
+                        stack="zero"
                     ),
                     color=alt.Color(
                         "Tipo pedido:N",
                         title="Tipo de Pedido"
                     ),
+                    order=alt.Order(
+                        "Ordem_Tipo_Pedido:Q",
+                        sort="ascending"
+                    ),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
                         alt.Tooltip("Tipo pedido:N", title="Tipo de Pedido"),
-                        alt.Tooltip("Receita:Q", title="Receita do Tipo", format=",.2f"),
-                        alt.Tooltip("Receita_Total:Q", title="Receita Total Marketplace", format=",.2f"),
+                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                        alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
