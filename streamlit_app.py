@@ -575,19 +575,12 @@ def formatar_chip_delta(atual, anterior):
         "neutral": "rgba(100,116,139,0.12)",
     }
 
-    return f"""
-    <span style="
-        display:inline-block;
-        padding:4px 10px;
-        border-radius:999px;
-        font-size:0.85rem;
-        color:{mapa[classe]};
-        background:{fundo[classe]};
-        white-space:nowrap;
-    ">
-        Variação: {texto}
-    </span>
-    """
+    return (
+        f'<span class="ranking-chip" '
+        f'style="color:{mapa[classe]}; background:{fundo[classe]};">'
+        f'Variação: {texto}'
+        f'</span>'
+    )
     
 def formatar_chip_margem(margem):
     try:
@@ -604,19 +597,12 @@ def formatar_chip_margem(margem):
         cor = "#dc2626"
         fundo = "rgba(239,68,68,0.12)"
 
-    return f"""
-    <span style="
-        display:inline-block;
-        padding:4px 10px;
-        border-radius:999px;
-        font-size:0.85rem;
-        color:{cor};
-        background:{fundo};
-        white-space:nowrap;
-    ">
-        Margem: {texto}
-    </span>
-    """
+    return (
+        f'<span class="ranking-chip" '
+        f'style="color:{cor}; background:{fundo};">'
+        f'Margem: {texto}'
+        f'</span>'
+    )
 
 def periodo_anterior(data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
@@ -1148,20 +1134,28 @@ try:
     st.markdown(
         """
         <style>
+        /* ──────────────────────────────────────────────
+           MÉTRICAS PRINCIPAIS
+        ────────────────────────────────────────────── */
         div[data-testid="stMetric"] {
             background: rgba(255,255,255,0.02);
             border: 1px solid rgba(128,128,128,0.18);
             border-radius: 12px;
             padding: 14px 16px;
         }
+    
         div[data-testid="stMetricLabel"] {
             font-size: 0.95rem;
         }
+    
         div[data-testid="stMetricValue"] {
             font-size: 1.45rem;
             line-height: 1.15;
         }
     
+        /* ──────────────────────────────────────────────
+           CARDS DOS RANKINGS
+        ────────────────────────────────────────────── */
         .ranking-card {
             border: 1px solid rgba(128,128,128,0.18);
             border-radius: 16px;
@@ -1173,45 +1167,35 @@ try:
     
         .ranking-card-grid {
             display: grid;
-            grid-template-columns: 44px 72px minmax(0, 1fr) 220px;
+            grid-template-columns: 44px 72px minmax(0, 1fr) 340px;
             gap: 12px;
             align-items: center;
         }
-        
-        .ranking-metrics {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: flex-end;
-            text-align: right;
-            white-space: nowrap;
-            padding: 10px 12px;
-            border-radius: 12px;
-            background: transparent;
-            border: 1px solid rgba(128,128,128,0.14);
+    
+        .ranking-pos {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #334155;
+            text-align: center;
         }
-        
-        @media (max-width: 768px) {
-            .ranking-card-grid {
-                grid-template-columns: 40px 64px 1fr;
-            }
-        
-            .ranking-metrics {
-                grid-column: 1 / -1;
-                margin-top: 8px;
-                padding: 10px 12px;
-                border-top: none;
-                align-items: flex-start;
-                text-align: left;
-                white-space: normal;
-                background: transparent;
-                border: 1px solid rgba(128,128,128,0.14);
-            }
-        
-            .ranking-img-wrap {
-                width: 64px;
-                height: 64px;
-            }
+    
+        .ranking-img-wrap {
+            width: 72px;
+            height: 72px;
+            border-radius: 12px;
+            border: 1px solid rgba(128,128,128,0.16);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            background: rgba(255,255,255,0.02);
+        }
+    
+        .ranking-img-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
         }
     
         .ranking-title {
@@ -1228,21 +1212,6 @@ try:
             word-break: break-word;
         }
     
-        .ranking-chips-row {
-            display: flex;
-            flex-direction: row;
-            gap: 8px;
-            justify-content: flex-end;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        
-        @media (max-width: 768px) {
-            .ranking-chips-row {
-                justify-content: flex-start;
-            }
-        }
-    
         .ranking-metrics {
             display: flex;
             flex-direction: column;
@@ -1254,28 +1223,111 @@ try:
             border-radius: 12px;
             background: transparent;
             border: 1px solid rgba(128,128,128,0.14);
+            min-width: 0;
         }
-            
-        @media (max-width: 768px) {
+    
+        .ranking-metrics strong {
+            font-weight: 700;
+        }
+    
+        .ranking-chips-row {
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: nowrap;
+            white-space: nowrap;
+            width: 100%;
+        }
+    
+        .ranking-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            line-height: 1.2;
+            white-space: nowrap;
+        }
+    
+        /* ──────────────────────────────────────────────
+           RESPONSIVO
+        ────────────────────────────────────────────── */
+        @media (max-width: 1100px) {
             .ranking-card-grid {
-                grid-template-columns: 40px 64px 1fr;
+                grid-template-columns: 44px 72px minmax(0, 1fr) 300px;
             }
     
-            .ranking-metrics {
-                grid-column: 1 / -1;
-                margin-top: 8px;
-                padding: 10px 12px;
-                border-top: none;
-                align-items: flex-start;
-                text-align: left;
-                white-space: normal;
-                background: transparent;
-                border: 1px solid rgba(128,128,128,0.14);
+            .ranking-chip {
+                font-size: 0.8rem;
+                padding: 4px 8px;
+            }
+        }
+    
+        @media (max-width: 900px) {
+            .ranking-card-grid {
+                grid-template-columns: 40px 64px minmax(0, 1fr);
             }
     
             .ranking-img-wrap {
                 width: 64px;
                 height: 64px;
+            }
+    
+            .ranking-metrics {
+                grid-column: 1 / -1;
+                margin-top: 8px;
+                align-items: flex-start;
+                text-align: left;
+                white-space: normal;
+                width: 100%;
+            }
+    
+            .ranking-chips-row {
+                justify-content: flex-start;
+                flex-wrap: wrap;
+                white-space: normal;
+            }
+        }
+    
+        @media (max-width: 480px) {
+            .ranking-card {
+                padding: 10px 12px;
+            }
+    
+            .ranking-card-grid {
+                grid-template-columns: 34px 56px minmax(0, 1fr);
+                gap: 10px;
+            }
+    
+            .ranking-pos {
+                font-size: 0.9rem;
+            }
+    
+            .ranking-img-wrap {
+                width: 56px;
+                height: 56px;
+                border-radius: 10px;
+            }
+    
+            .ranking-title {
+                font-size: 0.95rem;
+            }
+    
+            .ranking-subtitle {
+                font-size: 0.82rem;
+            }
+    
+            .ranking-metrics {
+                padding: 10px;
+                gap: 7px;
+            }
+    
+            .ranking-chip {
+                font-size: 0.78rem;
+                padding: 4px 8px;
             }
         }
         </style>
