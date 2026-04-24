@@ -235,8 +235,6 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Líquido: {formatar_brl(row["Liquido"])}</div>
-                        <div>Custo: {formatar_brl(row["Custo"])}</div>
                         <div>Margem: {margem_pct}</div>
                         <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
                         <div>{chip}</div>
@@ -293,8 +291,6 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Líquido: {formatar_brl(row["Liquido"])}</div>
-                        <div>Custo: {formatar_brl(row["Custo"])}</div>
                         <div>Margem: {margem_pct}</div>
                         <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
                         <div>{chip}</div>
