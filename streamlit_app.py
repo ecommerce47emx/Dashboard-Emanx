@@ -1180,7 +1180,7 @@ try:
     
         .ranking-card-grid {
             display: grid;
-            grid-template-columns: 44px 72px minmax(0, 1fr) 250px;
+            grid-template-columns: 44px 72px minmax(0, 1fr) 227px;
             gap: 12px;
             align-items: center;
         }
@@ -1239,8 +1239,8 @@ try:
             border-radius: 12px;
             background: transparent;
             border: 1px solid rgba(128,128,128,0.14);
-            width: 250px;
-            max-width: 250px;
+            width: 227px;
+            max-width: 227px;
             justify-self: end;
             min-width: 0;
             box-sizing: border-box;
@@ -1288,7 +1288,7 @@ try:
         ────────────────────────────────────────────── */
         @media (max-width: 1100px) {
             .ranking-card-grid {
-                grid-template-columns: 44px 72px minmax(0, 1fr) 250px;
+                grid-template-columns: 44px 72px minmax(0, 1fr) 227px;
             }
     
             .ranking-chip {
