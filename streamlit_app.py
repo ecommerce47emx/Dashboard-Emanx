@@ -115,7 +115,7 @@ def montar_ranking_produto(df_atual, df_anterior):
     df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
 
     return df_rank
-
+    
 def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
     if campo_grupo not in df_atual.columns or df_atual.empty:
         return pd.DataFrame()
@@ -210,7 +210,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
         produto = html.escape(truncar_texto(row["Produto"], 65))
         sku = html.escape(str(row.get("SKU", "") or ""))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
-        margem_pct = formatar_pct(row.get("Margem_Pct", 0))
+        chip_margem = formatar_chip_margem(row.get("Margem_Pct", 0))
 
         img_html = (
             f'<img src="{row["img_url"]}" alt="{produto}">'
@@ -234,10 +234,12 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
                         {subtitle_html}
                     </div>
                     <div class="ranking-metrics">
-                        <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Margem: {margem_pct}</div>
-                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                        <div>{chip}</div>
+                        <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
+                        <div><strong>Quantidade:</strong> {formatar_int(row["Quantidade"])}</div>
+                        <div class="ranking-chips-row">
+                            {chip_margem}
+                            {chip}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -266,7 +268,7 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
         nome_grupo = html.escape(str(row[campo_grupo]))
         produto_destaque = html.escape(truncar_texto(row.get("Produto_Destaque", "") or "", 65))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
-        margem_pct = formatar_pct(row.get("Margem_Pct", 0))
+        chip_margem = formatar_chip_margem(row.get("Margem_Pct", 0))
 
         img_html = (
             f'<img src="{row["img_url_destaque"]}" alt="{nome_grupo}">'
@@ -290,10 +292,12 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
                         {subtitle_html}
                     </div>
                     <div class="ranking-metrics">
-                        <div>Receita: {formatar_brl(row["Receita"])}</div>
-                        <div>Margem: {margem_pct}</div>
-                        <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
-                        <div>{chip}</div>
+                        <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
+                        <div><strong>Quantidade:</strong> {formatar_int(row["Quantidade"])}</div>
+                        <div class="ranking-chips-row">
+                            {chip_margem}
+                            {chip}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -558,16 +562,19 @@ def calcular_delta_percentual(atual, anterior):
 
 def formatar_chip_delta(atual, anterior):
     texto, classe = obter_delta_info(atual, anterior)
+
     mapa = {
         "up": "#15803d",
         "down": "#dc2626",
         "neutral": "#475569",
     }
+
     fundo = {
         "up": "rgba(34,197,94,0.12)",
         "down": "rgba(239,68,68,0.12)",
         "neutral": "rgba(100,116,139,0.12)",
     }
+
     return f"""
     <span style="
         display:inline-block;
@@ -578,10 +585,38 @@ def formatar_chip_delta(atual, anterior):
         background:{fundo[classe]};
         white-space:nowrap;
     ">
-        {texto}
+        Variação: {texto}
     </span>
     """
+    
+def formatar_chip_margem(margem):
+    try:
+        margem = float(margem or 0)
+    except Exception:
+        margem = 0.0
 
+    texto = formatar_pct(margem)
+
+    if margem > 0:
+        cor = "#15803d"
+        fundo = "rgba(34,197,94,0.12)"
+    else:
+        cor = "#dc2626"
+        fundo = "rgba(239,68,68,0.12)"
+
+    return f"""
+    <span style="
+        display:inline-block;
+        padding:4px 10px;
+        border-radius:999px;
+        font-size:0.85rem;
+        color:{cor};
+        background:{fundo};
+        white-space:nowrap;
+    ">
+        Margem: {texto}
+    </span>
+    """
 
 def periodo_anterior(data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
@@ -1193,6 +1228,21 @@ try:
             word-break: break-word;
         }
     
+        .ranking-chips-row {
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            justify-content: flex-end;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        @media (max-width: 768px) {
+            .ranking-chips-row {
+                justify-content: flex-start;
+            }
+        }
+    
         .ranking-metrics {
             display: flex;
             flex-direction: column;
@@ -1205,7 +1255,7 @@ try:
             background: transparent;
             border: 1px solid rgba(128,128,128,0.14);
         }
-    
+            
         @media (max-width: 768px) {
             .ranking-card-grid {
                 grid-template-columns: 40px 64px 1fr;
