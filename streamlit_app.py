@@ -1343,7 +1343,7 @@ try:
             }
     
             .ranking-chips-row {
-                justify-content: center;
+                justify-content: space-between;
                 flex-wrap: wrap;
                 white-space: normal;
             }
