@@ -55,15 +55,26 @@ def montar_ranking_produto(df_atual, df_anterior):
     if base_atual.empty:
         return pd.DataFrame()
 
-    rank_atual = (
-        base_atual.groupby("Produto", as_index=False)
-        .agg(
-            Receita=("Receita_Num", "sum"),
-            Quantidade=("Qtd_Num", "sum"),
-            img_url=("img_url", primeiro_valor_nao_vazio),
-            SKU=("SKU", primeiro_valor_nao_vazio) if "SKU" in base_atual.columns else ("Produto", lambda x: ""),
+    if "SKU" in base_atual.columns:
+        rank_atual = (
+            base_atual.groupby("Produto", as_index=False)
+            .agg(
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
+                SKU=("SKU", primeiro_valor_nao_vazio),
+            )
         )
-    )
+    else:
+        rank_atual = (
+            base_atual.groupby("Produto", as_index=False)
+            .agg(
+                Receita=("Receita_Num", "sum"),
+                Quantidade=("Qtd_Num", "sum"),
+                img_url=("img_url", primeiro_valor_nao_vazio),
+            )
+        )
+        rank_atual["SKU"] = ""
 
     rank_anterior = (
         base_anterior.groupby("Produto", as_index=False)
@@ -77,11 +88,7 @@ def montar_ranking_produto(df_atual, df_anterior):
     df_rank["Receita_Anterior"] = df_rank["Receita_Anterior"].fillna(0)
     df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
 
-    if "SKU" not in df_rank.columns:
-        df_rank["SKU"] = ""
-
     return df_rank
-
 
 def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
     if campo_grupo not in df_atual.columns or df_atual.empty:
@@ -441,6 +448,13 @@ def normalizar_codigo(valor, tamanho_min=6):
 
     return txt.zfill(tamanho_min)
 
+def normalizar_sku(valor):
+    if pd.isna(valor):
+        return ""
+    txt = str(valor).strip()
+    if txt.endswith(".0"):
+        txt = txt[:-2]
+    return txt
 
 def extrair_cor3(valor):
     if pd.isna(valor):
@@ -844,6 +858,9 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
 try:
     df = conn.read(spreadsheet=url_planilha, ttl="0")
     df.columns = [str(c).strip() for c in df.columns]
+
+    if "SKU" in df.columns:
+        df["SKU"] = df["SKU"].apply(normalizar_sku)
 
     for col_orig, col_num in [
         ("Receita", "Receita_Num"),
