@@ -55,6 +55,15 @@ def calcular_margem_pct(liquido, custo):
     except Exception:
         return 0.0
 
+def filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa):
+    if not somente_margem_negativa:
+        return df_rank
+
+    if df_rank.empty or "Margem_Pct" not in df_rank.columns:
+        return df_rank.iloc[0:0].copy()
+
+    return df_rank[df_rank["Margem_Pct"] < 0].copy()
+
 def montar_ranking_produto(df_atual, df_anterior):
     if "Produto" not in df_atual.columns or df_atual.empty:
         return pd.DataFrame()
@@ -974,6 +983,10 @@ try:
     )
 
     incluir_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
+    somente_margem_negativa = st.sidebar.toggle(
+        "Somente Margem Negativa",
+        value=False
+    )
 
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
@@ -1697,35 +1710,73 @@ try:
             with subtab_receita:
                 if campo == "Produto":
                     df_rank = montar_ranking_produto(df_f, df_prev)
+                    df_rank = filtrar_ranking_margem_negativa(
+                        df_rank,
+                        somente_margem_negativa
+                    )
+            
                     st.caption(
                         f"Comparação por receita contra o período anterior: "
                         f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
                         if ini_ant is not None and fim_ant is not None else
                         "Comparação por receita contra o período anterior"
                     )
+            
+                    if somente_margem_negativa:
+                        st.caption("Exibindo somente produtos com margem negativa.")
+            
                     render_ranking_produto(df_rank, "Receita", top_n)
+            
                 else:
                     df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Receita")
+                    df_rank = filtrar_ranking_margem_negativa(
+                        df_rank,
+                        somente_margem_negativa
+                    )
+            
                     st.caption(
                         f"A imagem exibida é do produto com maior receita dentro de cada {campo.lower()}."
                     )
+            
+                    if somente_margem_negativa:
+                        st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
+            
                     render_ranking_grupo(df_rank, campo, "Receita", top_n)
-
+            
             with subtab_qtd:
                 if campo == "Produto":
                     df_rank = montar_ranking_produto(df_f, df_prev)
+                    df_rank = filtrar_ranking_margem_negativa(
+                        df_rank,
+                        somente_margem_negativa
+                    )
+            
                     st.caption(
                         f"Comparação por quantidade contra o período anterior: "
                         f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
                         if ini_ant is not None and fim_ant is not None else
                         "Comparação por quantidade contra o período anterior"
                     )
+            
+                    if somente_margem_negativa:
+                        st.caption("Exibindo somente produtos com margem negativa.")
+            
                     render_ranking_produto(df_rank, "Quantidade", top_n)
+            
                 else:
                     df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Quantidade")
+                    df_rank = filtrar_ranking_margem_negativa(
+                        df_rank,
+                        somente_margem_negativa
+                    )
+            
                     st.caption(
                         f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}."
                     )
+            
+                    if somente_margem_negativa:
+                        st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
+            
                     render_ranking_grupo(df_rank, campo, "Quantidade", top_n)
 
     st.divider()
