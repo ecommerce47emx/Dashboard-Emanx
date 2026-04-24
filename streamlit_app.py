@@ -32,7 +32,7 @@ MARKETPLACE_ORDEM_CORES = [
 ]
 
 MARKETPLACE_CORES = [
-    "#ffc400",  # MERCADO LIVRE
+    "#ffd100",  # MERCADO LIVRE
     "#ff9900",  # AMAZON
     "#ee4d2d",  # SHOPEE
     "#0033a0",  # CASAS BAHIA
