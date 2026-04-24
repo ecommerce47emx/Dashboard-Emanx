@@ -36,7 +36,24 @@ def formatar_int(valor):
         return "0"
 
 def formatar_pct(valor):
-    return f"{valor * 100:.1f}%".replace(".", ",")
+    try:
+        if pd.isna(valor):
+            return "0,0%"
+        return f"{valor * 100:.1f}%".replace(".", ",")
+    except Exception:
+        return "0,0%"
+
+def calcular_margem_pct(liquido, custo):
+    try:
+        liquido = float(liquido or 0)
+        custo = float(custo or 0)
+
+        if liquido == 0:
+            return 0.0
+
+        return 1 - (custo / liquido)
+    except Exception:
+        return 0.0
 
 def montar_ranking_produto(df_atual, df_anterior):
     if "Produto" not in df_atual.columns or df_atual.empty:
@@ -60,6 +77,8 @@ def montar_ranking_produto(df_atual, df_anterior):
             base_atual.groupby("Produto", as_index=False)
             .agg(
                 Receita=("Receita_Num", "sum"),
+                Liquido=("Liquido_Num", "sum"),
+                Custo=("Custo_Num", "sum"),
                 Quantidade=("Qtd_Num", "sum"),
                 img_url=("img_url", primeiro_valor_nao_vazio),
                 SKU=("SKU", primeiro_valor_nao_vazio),
@@ -70,11 +89,18 @@ def montar_ranking_produto(df_atual, df_anterior):
             base_atual.groupby("Produto", as_index=False)
             .agg(
                 Receita=("Receita_Num", "sum"),
+                Liquido=("Liquido_Num", "sum"),
+                Custo=("Custo_Num", "sum"),
                 Quantidade=("Qtd_Num", "sum"),
                 img_url=("img_url", primeiro_valor_nao_vazio),
             )
         )
         rank_atual["SKU"] = ""
+
+    rank_atual["Margem_Pct"] = rank_atual.apply(
+        lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
+        axis=1
+    )
 
     rank_anterior = (
         base_anterior.groupby("Produto", as_index=False)
@@ -111,8 +137,15 @@ def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
         base_atual.groupby(campo_grupo, as_index=False)
         .agg(
             Receita=("Receita_Num", "sum"),
+            Liquido=("Liquido_Num", "sum"),
+            Custo=("Custo_Num", "sum"),
             Quantidade=("Qtd_Num", "sum"),
         )
+    )
+
+    rank_atual["Margem_Pct"] = rank_atual.apply(
+        lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
+        axis=1
     )
 
     rank_anterior = (
@@ -177,6 +210,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
         produto = html.escape(truncar_texto(row["Produto"], 65))
         sku = html.escape(str(row.get("SKU", "") or ""))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
+        margem_pct = formatar_pct(row.get("Margem_Pct", 0))
 
         img_html = (
             f'<img src="{row["img_url"]}" alt="{produto}">'
@@ -201,6 +235,9 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div>Receita: {formatar_brl(row["Receita"])}</div>
+                        <div>Líquido: {formatar_brl(row["Liquido"])}</div>
+                        <div>Custo: {formatar_brl(row["Custo"])}</div>
+                        <div>Margem: {margem_pct}</div>
                         <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
                         <div>{chip}</div>
                     </div>
@@ -231,6 +268,7 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
         nome_grupo = html.escape(str(row[campo_grupo]))
         produto_destaque = html.escape(truncar_texto(row.get("Produto_Destaque", "") or "", 65))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
+        margem_pct = formatar_pct(row.get("Margem_Pct", 0))
 
         img_html = (
             f'<img src="{row["img_url_destaque"]}" alt="{nome_grupo}">'
@@ -255,6 +293,9 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div>Receita: {formatar_brl(row["Receita"])}</div>
+                        <div>Líquido: {formatar_brl(row["Liquido"])}</div>
+                        <div>Custo: {formatar_brl(row["Custo"])}</div>
+                        <div>Margem: {margem_pct}</div>
                         <div>Quantidade: {formatar_int(row["Quantidade"])}</div>
                         <div>{chip}</div>
                     </div>
