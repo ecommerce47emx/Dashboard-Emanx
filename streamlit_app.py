@@ -32,11 +32,11 @@ MARKETPLACE_ORDEM_CORES = [
 ]
 
 MARKETPLACE_CORES = [
-    "#ebae25",  # MERCADO LIVRE
-    "#f97316",  # AMAZON
-    "#ef4444",  # SHOPEE
+    "#ebd425",  # MERCADO LIVRE
+    "#eb7d25",  # AMAZON
+    "#eb4925",  # SHOPEE
     "#2563eb",  # CASAS BAHIA
-    "#06b6d4",  # MAGALU
+    "#258aeb",  # MAGALU
     "#7c3aed",  # TIKTOK
     "#64748b",  # MANUAL
 ]
