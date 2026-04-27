@@ -1218,13 +1218,6 @@ try:
         placeholder="Todos os marketplaces",
     )
 
-    incluir_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
-    
-    somente_margem_negativa = st.sidebar.toggle(
-        "Somente Margem Negativa",
-        value=False
-    )
-    
     filiais_lista = ["00001", "00008", "00016", "20301"]
     
     filial_sel = st.sidebar.multiselect(
@@ -1259,6 +1252,13 @@ try:
     
     if somente_fulfillment:
         st.sidebar.caption("Filtrando automaticamente Tipos de Pedido que contêm FULL.")
+    
+    incluir_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
+    
+    somente_margem_negativa = st.sidebar.toggle(
+        "Somente Margem Negativa",
+        value=False
+    )
     
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
