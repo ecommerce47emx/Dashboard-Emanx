@@ -366,30 +366,29 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n, incluir_devolucao=
             if sku else ""
         )
 
-        st.markdown(
-            f"""
-            <div class="ranking-card">
-                <div class="ranking-card-grid">
-                    <div class="ranking-pos">{pos}</div>
-                    <div class="ranking-img-wrap">{img_html}</div>
-                    <div>
-                        <div class="ranking-title">{produto}</div>
-                        {subtitle_html}
-                    </div>
-                    <div class="ranking-metrics">
-                        <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
-                        <div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>
-                        {linha_vendas_60d}
-                        <div class="ranking-chips-row">
-                            {chip_analise}
-                            {chip}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        card_html = "".join([
+            '<div class="ranking-card">',
+                '<div class="ranking-card-grid">',
+                    f'<div class="ranking-pos">{pos}</div>',
+                    f'<div class="ranking-img-wrap">{img_html}</div>',
+                    '<div>',
+                        f'<div class="ranking-title">{produto}</div>',
+                        subtitle_html,
+                    '</div>',
+                    '<div class="ranking-metrics">',
+                        f'<div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>',
+                        f'<div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>',
+                        linha_vendas_60d,
+                        '<div class="ranking-chips-row">',
+                            chip_analise,
+                            chip,
+                        '</div>',
+                    '</div>',
+                '</div>',
+            '</div>',
+        ])
+
+        st.markdown(card_html, unsafe_allow_html=True)
         
 def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir_devolucao=False):
     if df_rank.empty:
@@ -439,31 +438,29 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir
             if produto_destaque else ""
         )
 
-        st.markdown(
-            f"""
-            <div class="ranking-card">
-                <div class="ranking-card-grid">
-                    <div class="ranking-pos">{pos}</div>
-                    <div class="ranking-img-wrap">{img_html}</div>
-                    <div>
-                        <div class="ranking-title">{nome_grupo}</div>
-                        {subtitle_html}
-                    </div>
-                    <div class="ranking-metrics">
-                        <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
-                        <div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>
-                        {linha_vendas_60d}
-                        <div class="ranking-chips-row">
-                            {chip_analise}
-                            {chip}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        card_html = "".join([
+            '<div class="ranking-card">',
+                '<div class="ranking-card-grid">',
+                    f'<div class="ranking-pos">{pos}</div>',
+                    f'<div class="ranking-img-wrap">{img_html}</div>',
+                    '<div>',
+                        f'<div class="ranking-title">{nome_grupo}</div>',
+                        subtitle_html,
+                    '</div>',
+                    '<div class="ranking-metrics">',
+                        f'<div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>',
+                        f'<div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>',
+                        linha_vendas_60d,
+                        '<div class="ranking-chips-row">',
+                            chip_analise,
+                            chip,
+                        '</div>',
+                    '</div>',
+                '</div>',
+            '</div>',
+        ])
 
+        st.markdown(card_html, unsafe_allow_html=True)
 
 def limpar_moeda(valor):
     """
