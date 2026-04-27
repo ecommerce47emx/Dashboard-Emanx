@@ -74,6 +74,51 @@ def calcular_margem_pct(liquido, custo):
         return 1 - (custo / liquido)
     except Exception:
         return 0.0
+def calcular_taxa_devolucao_pct(qtd_devolvida, qtd_vendida_60d):
+    try:
+        qtd_devolvida = float(qtd_devolvida or 0)
+        qtd_vendida_60d = float(qtd_vendida_60d or 0)
+
+        if qtd_vendida_60d <= 0:
+            return 0.0
+
+        return qtd_devolvida / qtd_vendida_60d
+    except Exception:
+        return 0.0
+
+
+def filtrar_base_vendas_60d(
+    df_base,
+    data_fim,
+    marcas_sel,
+    categorias_sel,
+    fornecedores_sel
+):
+    if data_fim is None or "Data_Emissao_Filtro" not in df_base.columns:
+        return df_base.iloc[0:0].copy()
+
+    fim_60d = pd.Timestamp(data_fim).normalize()
+    ini_60d = fim_60d - pd.Timedelta(days=59)
+
+    df_vendas_60d = df_base[~df_base["Eh_Devolucao"]].copy()
+
+    if marcas_sel and "Marca" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[df_vendas_60d["Marca"].isin(marcas_sel)]
+
+    if categorias_sel and "Categoria" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[df_vendas_60d["Categoria"].isin(categorias_sel)]
+
+    if fornecedores_sel and "Fornecedor" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[df_vendas_60d["Fornecedor"].isin(fornecedores_sel)]
+
+    df_vendas_60d = filtrar_intervalo(
+        df_vendas_60d,
+        "Data_Emissao_Filtro",
+        ini_60d,
+        fim_60d
+    )
+
+    return df_vendas_60d
 
 def filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa):
     if not somente_margem_negativa:
@@ -84,7 +129,7 @@ def filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa):
 
     return df_rank[df_rank["Margem_Pct"] < 0].copy()
 
-def montar_ranking_produto(df_atual, df_anterior):
+def montar_ranking_produto(df_atual, df_anterior, df_vendas_60d=None, incluir_devolucao=False):
     if "Produto" not in df_atual.columns or df_atual.empty:
         return pd.DataFrame()
 
@@ -131,6 +176,34 @@ def montar_ranking_produto(df_atual, df_anterior):
         axis=1
     )
 
+    if incluir_devolucao:
+        if df_vendas_60d is not None and not df_vendas_60d.empty and "Produto" in df_vendas_60d.columns:
+            base_vendas_60d = df_vendas_60d[
+                df_vendas_60d["Produto"].notna() &
+                (df_vendas_60d["Produto"].astype(str).str.strip() != "")
+            ].copy()
+
+            vendas_60d = (
+                base_vendas_60d.groupby("Produto", as_index=False)
+                .agg(Quantidade_Vendida_60d=("Qtd_Num", "sum"))
+            )
+        else:
+            vendas_60d = pd.DataFrame(columns=["Produto", "Quantidade_Vendida_60d"])
+
+        rank_atual = rank_atual.merge(vendas_60d, on="Produto", how="left")
+        rank_atual["Quantidade_Vendida_60d"] = rank_atual["Quantidade_Vendida_60d"].fillna(0)
+
+        rank_atual["Taxa_Devolucao_Pct"] = rank_atual.apply(
+            lambda row: calcular_taxa_devolucao_pct(
+                row["Quantidade"],
+                row["Quantidade_Vendida_60d"]
+            ),
+            axis=1
+        )
+    else:
+        rank_atual["Quantidade_Vendida_60d"] = 0
+        rank_atual["Taxa_Devolucao_Pct"] = 0.0
+
     rank_anterior = (
         base_anterior.groupby("Produto", as_index=False)
         .agg(
@@ -145,7 +218,7 @@ def montar_ranking_produto(df_atual, df_anterior):
 
     return df_rank
     
-def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
+def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao, df_vendas_60d=None, incluir_devolucao=False):
     if campo_grupo not in df_atual.columns or df_atual.empty:
         return pd.DataFrame()
 
@@ -176,6 +249,34 @@ def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
         lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
         axis=1
     )
+
+    if incluir_devolucao:
+        if df_vendas_60d is not None and not df_vendas_60d.empty and campo_grupo in df_vendas_60d.columns:
+            base_vendas_60d = df_vendas_60d[
+                df_vendas_60d[campo_grupo].notna() &
+                (df_vendas_60d[campo_grupo].astype(str).str.strip() != "")
+            ].copy()
+
+            vendas_60d = (
+                base_vendas_60d.groupby(campo_grupo, as_index=False)
+                .agg(Quantidade_Vendida_60d=("Qtd_Num", "sum"))
+            )
+        else:
+            vendas_60d = pd.DataFrame(columns=[campo_grupo, "Quantidade_Vendida_60d"])
+
+        rank_atual = rank_atual.merge(vendas_60d, on=campo_grupo, how="left")
+        rank_atual["Quantidade_Vendida_60d"] = rank_atual["Quantidade_Vendida_60d"].fillna(0)
+
+        rank_atual["Taxa_Devolucao_Pct"] = rank_atual.apply(
+            lambda row: calcular_taxa_devolucao_pct(
+                row["Quantidade"],
+                row["Quantidade_Vendida_60d"]
+            ),
+            axis=1
+        )
+    else:
+        rank_atual["Quantidade_Vendida_60d"] = 0
+        rank_atual["Taxa_Devolucao_Pct"] = 0.0
 
     rank_anterior = (
         base_anterior.groupby(campo_grupo, as_index=False)
@@ -217,8 +318,7 @@ def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao):
 
     return df_rank
 
-
-def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
+def render_ranking_produto(df_rank, metrica_ordenacao, top_n, incluir_devolucao=False):
     if df_rank.empty:
         st.info("Sem dados para montar este ranking.")
         return
@@ -239,7 +339,21 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
         produto = html.escape(truncar_texto(row["Produto"], 65))
         sku = html.escape(str(row.get("SKU", "") or ""))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
-        chip_margem = formatar_chip_margem(row.get("Margem_Pct", 0))
+
+        if incluir_devolucao:
+            chip_analise = formatar_chip_taxa_devolucao(
+                row.get("Taxa_Devolucao_Pct", 0),
+                row.get("Quantidade_Vendida_60d", 0)
+            )
+            rotulo_quantidade = "Devolvidos"
+            linha_vendas_60d = (
+                f'<div><strong>Vendidos 60D:</strong> '
+                f'{formatar_int(row.get("Quantidade_Vendida_60d", 0))}</div>'
+            )
+        else:
+            chip_analise = formatar_chip_margem(row.get("Margem_Pct", 0))
+            rotulo_quantidade = "Quantidade"
+            linha_vendas_60d = ""
 
         img_html = (
             f'<img src="{row["img_url"]}" alt="{produto}">'
@@ -264,9 +378,10 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
-                        <div><strong>Quantidade:</strong> {formatar_int(row["Quantidade"])}</div>
+                        <div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>
+                        {linha_vendas_60d}
                         <div class="ranking-chips-row">
-                            {chip_margem}
+                            {chip_analise}
                             {chip}
                         </div>
                     </div>
@@ -276,7 +391,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n):
             unsafe_allow_html=True
         )
         
-def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
+def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir_devolucao=False):
     if df_rank.empty:
         st.info("Sem dados para montar este ranking.")
         return
@@ -297,7 +412,21 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
         nome_grupo = html.escape(str(row[campo_grupo]))
         produto_destaque = html.escape(truncar_texto(row.get("Produto_Destaque", "") or "", 65))
         chip = formatar_chip_delta(row[metrica_ordenacao], row[coluna_anterior])
-        chip_margem = formatar_chip_margem(row.get("Margem_Pct", 0))
+
+        if incluir_devolucao:
+            chip_analise = formatar_chip_taxa_devolucao(
+                row.get("Taxa_Devolucao_Pct", 0),
+                row.get("Quantidade_Vendida_60d", 0)
+            )
+            rotulo_quantidade = "Devolvidos"
+            linha_vendas_60d = (
+                f'<div><strong>Vendidos 60D:</strong> '
+                f'{formatar_int(row.get("Quantidade_Vendida_60d", 0))}</div>'
+            )
+        else:
+            chip_analise = formatar_chip_margem(row.get("Margem_Pct", 0))
+            rotulo_quantidade = "Quantidade"
+            linha_vendas_60d = ""
 
         img_html = (
             f'<img src="{row["img_url_destaque"]}" alt="{nome_grupo}">'
@@ -322,9 +451,10 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n):
                     </div>
                     <div class="ranking-metrics">
                         <div><strong>Receita:</strong> {formatar_brl(row["Receita"])}</div>
-                        <div><strong>Quantidade:</strong> {formatar_int(row["Quantidade"])}</div>
+                        <div><strong>{rotulo_quantidade}:</strong> {formatar_int(row["Quantidade"])}</div>
+                        {linha_vendas_60d}
                         <div class="ranking-chips-row">
-                            {chip_margem}
+                            {chip_analise}
                             {chip}
                         </div>
                     </div>
@@ -630,6 +760,38 @@ def formatar_chip_margem(margem):
         f'<span class="ranking-chip" '
         f'style="color:{cor}; background:{fundo};">'
         f'Margem: {texto}'
+        f'</span>'
+    )
+
+def formatar_chip_taxa_devolucao(taxa_devolucao, qtd_vendida_60d):
+    try:
+        taxa_devolucao = float(taxa_devolucao or 0)
+        qtd_vendida_60d = float(qtd_vendida_60d or 0)
+    except Exception:
+        taxa_devolucao = 0.0
+        qtd_vendida_60d = 0.0
+
+    if qtd_vendida_60d <= 0:
+        return (
+            f'<span class="ranking-chip" '
+            f'style="color:#475569; background:rgba(100,116,139,0.12);">'
+            f'Devolução: N/D'
+            f'</span>'
+        )
+
+    texto = formatar_pct(taxa_devolucao)
+
+    if taxa_devolucao > 0:
+        cor = "#dc2626"
+        fundo = "rgba(239,68,68,0.12)"
+    else:
+        cor = "#475569"
+        fundo = "rgba(100,116,139,0.12)"
+
+    return (
+        f'<span class="ranking-chip" '
+        f'style="color:{cor}; background:{fundo};">'
+        f'Devolução: {texto}'
         f'</span>'
     )
 
@@ -1140,7 +1302,18 @@ try:
         df_prev = df_dim.iloc[0:0].copy()
         ini_ant = fim_ant = None
         dias_periodo = 0
-
+    
+    if incluir_devolucao and data_fim is not None:
+        df_vendas_60d = filtrar_base_vendas_60d(
+            df_base=df,
+            data_fim=data_fim,
+            marcas_sel=marca_sel,
+            categorias_sel=categoria_sel,
+            fornecedores_sel=fornecedor_sel
+        )
+    else:
+        df_vendas_60d = df.iloc[0:0].copy()
+    
     if data_ini is not None and data_fim is not None:
         df_grafico_base = df_dim.copy()
     else:
@@ -1776,11 +1949,18 @@ try:
 
             with subtab_receita:
                 if campo == "Produto":
-                    df_rank = montar_ranking_produto(df_f, df_prev)
-                    df_rank = filtrar_ranking_margem_negativa(
-                        df_rank,
-                        somente_margem_negativa
+                    df_rank = montar_ranking_produto(
+                        df_f,
+                        df_prev,
+                        df_vendas_60d=df_vendas_60d,
+                        incluir_devolucao=incluir_devolucao
                     )
+            
+                    if not incluir_devolucao:
+                        df_rank = filtrar_ranking_margem_negativa(
+                            df_rank,
+                            somente_margem_negativa
+                        )
             
                     st.caption(
                         f"Comparação por receita contra o período anterior: "
@@ -1789,34 +1969,65 @@ try:
                         "Comparação por receita contra o período anterior"
                     )
             
-                    if somente_margem_negativa:
+                    if incluir_devolucao:
+                        st.caption("Exibindo taxa de devolução com base na quantidade vendida nos últimos 60 dias.")
+                    elif somente_margem_negativa:
                         st.caption("Exibindo somente produtos com margem negativa.")
             
-                    render_ranking_produto(df_rank, "Receita", top_n)
+                    render_ranking_produto(
+                        df_rank,
+                        "Receita",
+                        top_n,
+                        incluir_devolucao=incluir_devolucao
+                    )
             
                 else:
-                    df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Receita")
-                    df_rank = filtrar_ranking_margem_negativa(
-                        df_rank,
-                        somente_margem_negativa
+                    df_rank = montar_ranking_grupo(
+                        df_f,
+                        df_prev,
+                        campo,
+                        "Receita",
+                        df_vendas_60d=df_vendas_60d,
+                        incluir_devolucao=incluir_devolucao
                     )
+            
+                    if not incluir_devolucao:
+                        df_rank = filtrar_ranking_margem_negativa(
+                            df_rank,
+                            somente_margem_negativa
+                        )
             
                     st.caption(
                         f"A imagem exibida é do produto com maior receita dentro de cada {campo.lower()}."
                     )
             
-                    if somente_margem_negativa:
+                    if incluir_devolucao:
+                        st.caption(f"Exibindo taxa de devolução por {campo.lower()} com base nos últimos 60 dias.")
+                    elif somente_margem_negativa:
                         st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
             
-                    render_ranking_grupo(df_rank, campo, "Receita", top_n)
+                    render_ranking_grupo(
+                        df_rank,
+                        campo,
+                        "Receita",
+                        top_n,
+                        incluir_devolucao=incluir_devolucao
+                    )
             
             with subtab_qtd:
                 if campo == "Produto":
-                    df_rank = montar_ranking_produto(df_f, df_prev)
-                    df_rank = filtrar_ranking_margem_negativa(
-                        df_rank,
-                        somente_margem_negativa
+                    df_rank = montar_ranking_produto(
+                        df_f,
+                        df_prev,
+                        df_vendas_60d=df_vendas_60d,
+                        incluir_devolucao=incluir_devolucao
                     )
+            
+                    if not incluir_devolucao:
+                        df_rank = filtrar_ranking_margem_negativa(
+                            df_rank,
+                            somente_margem_negativa
+                        )
             
                     st.caption(
                         f"Comparação por quantidade contra o período anterior: "
@@ -1825,26 +2036,50 @@ try:
                         "Comparação por quantidade contra o período anterior"
                     )
             
-                    if somente_margem_negativa:
+                    if incluir_devolucao:
+                        st.caption("Exibindo quantidade devolvida e taxa de devolução com base nos últimos 60 dias.")
+                    elif somente_margem_negativa:
                         st.caption("Exibindo somente produtos com margem negativa.")
             
-                    render_ranking_produto(df_rank, "Quantidade", top_n)
+                    render_ranking_produto(
+                        df_rank,
+                        "Quantidade",
+                        top_n,
+                        incluir_devolucao=incluir_devolucao
+                    )
             
                 else:
-                    df_rank = montar_ranking_grupo(df_f, df_prev, campo, "Quantidade")
-                    df_rank = filtrar_ranking_margem_negativa(
-                        df_rank,
-                        somente_margem_negativa
+                    df_rank = montar_ranking_grupo(
+                        df_f,
+                        df_prev,
+                        campo,
+                        "Quantidade",
+                        df_vendas_60d=df_vendas_60d,
+                        incluir_devolucao=incluir_devolucao
                     )
+            
+                    if not incluir_devolucao:
+                        df_rank = filtrar_ranking_margem_negativa(
+                            df_rank,
+                            somente_margem_negativa
+                        )
             
                     st.caption(
                         f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}."
                     )
             
-                    if somente_margem_negativa:
+                    if incluir_devolucao:
+                        st.caption(f"Exibindo quantidade devolvida e taxa de devolução por {campo.lower()} com base nos últimos 60 dias.")
+                    elif somente_margem_negativa:
                         st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
             
-                    render_ranking_grupo(df_rank, campo, "Quantidade", top_n)
+                    render_ranking_grupo(
+                        df_rank,
+                        campo,
+                        "Quantidade",
+                        top_n,
+                        incluir_devolucao=incluir_devolucao
+                    )
 
     st.divider()
 
