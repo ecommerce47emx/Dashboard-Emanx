@@ -90,9 +90,12 @@ def calcular_taxa_devolucao_pct(qtd_devolvida, qtd_vendida_60d):
 def filtrar_base_vendas_60d(
     df_base,
     data_fim,
+    filiais_sel,
+    tipos_pedido_sel,
     marcas_sel,
     categorias_sel,
-    fornecedores_sel
+    fornecedores_sel,
+    somente_fulfillment
 ):
     if data_fim is None or "Data_Emissao_Filtro" not in df_base.columns:
         return df_base.iloc[0:0].copy()
@@ -101,6 +104,18 @@ def filtrar_base_vendas_60d(
     ini_60d = fim_60d - pd.Timedelta(days=59)
 
     df_vendas_60d = df_base[~df_base["Eh_Devolucao"]].copy()
+
+    if filiais_sel and "Filial_Filtro" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[df_vendas_60d["Filial_Filtro"].isin(filiais_sel)]
+
+    if somente_fulfillment and "Tipo pedido" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[
+            df_vendas_60d["Tipo pedido"]
+            .apply(normalizar_texto)
+            .str.contains("FULL", na=False)
+        ]
+    elif tipos_pedido_sel and "Tipo pedido" in df_vendas_60d.columns:
+        df_vendas_60d = df_vendas_60d[df_vendas_60d["Tipo pedido"].isin(tipos_pedido_sel)]
 
     if marcas_sel and "Marca" in df_vendas_60d.columns:
         df_vendas_60d = df_vendas_60d[df_vendas_60d["Marca"].isin(marcas_sel)]
@@ -119,7 +134,6 @@ def filtrar_base_vendas_60d(
     )
 
     return df_vendas_60d
-
 def filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa):
     if not somente_margem_negativa:
         return df_rank
@@ -653,6 +667,26 @@ def normalizar_sku(valor):
         txt = txt[:-2]
     return txt
 
+def normalizar_filial(valor):
+    if pd.isna(valor):
+        return ""
+
+    txt = str(valor).strip()
+
+    if txt.endswith(".0"):
+        txt = txt[:-2]
+
+    num = pd.to_numeric(txt, errors="coerce")
+    if pd.notna(num):
+        txt = str(int(num))
+    else:
+        txt = re.sub(r"\D", "", txt)
+
+    if not txt:
+        return ""
+
+    return txt.zfill(5)
+
 def extrair_cor3(valor):
     if pd.isna(valor):
         return ""
@@ -1024,17 +1058,23 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
 def aplicar_filtros_dimensionais(
     df_base,
     marketplaces_sel,
+    filiais_sel,
+    tipos_pedido_sel,
     marcas_sel,
     categorias_sel,
     fornecedores_sel,
-    incluir_devolucao
+    incluir_devolucao,
+    somente_fulfillment
 ):
     """
     Regras:
-    - toggle desligado: traz somente não devolução
-    - toggle ligado: traz somente devolução
-    - marketplace vazio: equivale a todos
-    - quando toggle ligado, ignora filtro de marketplace
+    toggle devolução desligado: traz somente não devolução
+    toggle devolução ligado: traz somente devolução
+    marketplace vazio: equivale a todos
+    quando devolução está ligada, ignora filtro de marketplace
+    filial vazia: equivale a todas
+    tipo pedido vazio: equivale a todos
+    somente fulfillment ligado: traz Tipo pedido contendo FULL e ignora seleção manual de Tipo pedido
     """
     if incluir_devolucao:
         df_out = df_base[df_base["Eh_Devolucao"]].copy()
@@ -1044,13 +1084,25 @@ def aplicar_filtros_dimensionais(
         if marketplaces_sel:
             df_out = df_out[df_out["Grupo de Marketplace"].isin(marketplaces_sel)]
 
-    if marcas_sel:
+    if filiais_sel and "Filial_Filtro" in df_out.columns:
+        df_out = df_out[df_out["Filial_Filtro"].isin(filiais_sel)]
+
+    if somente_fulfillment and "Tipo pedido" in df_out.columns:
+        df_out = df_out[
+            df_out["Tipo pedido"]
+            .apply(normalizar_texto)
+            .str.contains("FULL", na=False)
+        ]
+    elif tipos_pedido_sel and "Tipo pedido" in df_out.columns:
+        df_out = df_out[df_out["Tipo pedido"].isin(tipos_pedido_sel)]
+
+    if marcas_sel and "Marca" in df_out.columns:
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
 
-    if categorias_sel:
+    if categorias_sel and "Categoria" in df_out.columns:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
 
-    if fornecedores_sel:
+    if fornecedores_sel and "Fornecedor" in df_out.columns:
         df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
     return df_out
@@ -1107,6 +1159,11 @@ try:
 
     if "SKU" in df.columns:
         df["SKU"] = df["SKU"].apply(normalizar_sku)
+        
+    if "Filial" in df.columns:
+        df["Filial_Filtro"] = df["Filial"].apply(normalizar_filial)
+    else:
+        df["Filial_Filtro"] = ""
 
     for col_orig, col_num in [
         ("Receita", "Receita_Num"),
@@ -1162,11 +1219,47 @@ try:
     )
 
     incluir_devolucao = st.sidebar.toggle("Somente Devolução", value=False)
+    
     somente_margem_negativa = st.sidebar.toggle(
         "Somente Margem Negativa",
         value=False
     )
-
+    
+    filiais_lista = ["00001", "00008", "00016", "20301"]
+    
+    filial_sel = st.sidebar.multiselect(
+        "Filial",
+        options=filiais_lista,
+        default=[],
+        placeholder="Todas as filiais",
+    )
+    
+    if "Tipo pedido" in df.columns:
+        tipo_pedido_lista = sorted(
+            df["Tipo pedido"]
+            .dropna()
+            .astype(str)
+            .str.strip()
+            .unique()
+        )
+    
+        tipo_pedido_sel = st.sidebar.multiselect(
+            "Tipo de Pedido",
+            options=tipo_pedido_lista,
+            default=[],
+            placeholder="Todos os tipos de pedido",
+        )
+    else:
+        tipo_pedido_sel = []
+    
+    somente_fulfillment = st.sidebar.toggle(
+        "Somente Fulfillment",
+        value=False
+    )
+    
+    if somente_fulfillment:
+        st.sidebar.caption("Filtrando automaticamente Tipos de Pedido que contêm FULL.")
+    
     if "Marca" in df.columns:
         marca_lista = sorted(df["Marca"].dropna().unique())
         marca_sel = st.sidebar.multiselect(
@@ -1284,10 +1377,13 @@ try:
     df_dim = aplicar_filtros_dimensionais(
         df_base=df,
         marketplaces_sel=mkt_sel,
+        filiais_sel=filial_sel,
+        tipos_pedido_sel=tipo_pedido_sel,
         marcas_sel=marca_sel,
         categorias_sel=categoria_sel,
         fornecedores_sel=fornecedor_sel,
         incluir_devolucao=incluir_devolucao,
+        somente_fulfillment=somente_fulfillment,
     )
 
     if data_ini is not None and data_fim is not None:
@@ -1304,9 +1400,12 @@ try:
         df_vendas_60d = filtrar_base_vendas_60d(
             df_base=df,
             data_fim=data_fim,
+            filiais_sel=filial_sel,
+            tipos_pedido_sel=tipo_pedido_sel,
             marcas_sel=marca_sel,
             categorias_sel=categoria_sel,
-            fornecedores_sel=fornecedor_sel
+            fornecedores_sel=fornecedor_sel,
+            somente_fulfillment=somente_fulfillment
         )
     else:
         df_vendas_60d = df.iloc[0:0].copy()
