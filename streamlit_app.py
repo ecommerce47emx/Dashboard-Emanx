@@ -1233,8 +1233,8 @@ try:
     st.sidebar.header("Filtros")
 
     if st.sidebar.button("Atualizar dados"):
-    carregar_e_tratar_dados.clear()
-    st.rerun()
+        carregar_e_tratar_dados.clear()
+        st.rerun()
     
     mkt_lista = sorted(
         df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
