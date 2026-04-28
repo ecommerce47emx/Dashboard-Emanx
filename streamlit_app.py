@@ -2088,8 +2088,8 @@ try:
             top_n = st.slider(
                 "Número de itens no ranking",
                 5,
-                30,
-                10,
+                35,
+                15,
                 key=f"top_n_{campo}"
             )
 
