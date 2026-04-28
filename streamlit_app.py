@@ -2089,7 +2089,7 @@ try:
                 "Número de itens no ranking",
                 5,
                 35,
-                15,
+                20,
                 key=f"top_n_{campo}"
             )
 
