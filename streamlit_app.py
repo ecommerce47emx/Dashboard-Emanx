@@ -1149,52 +1149,77 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
 
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
+@st.cache_data(
+    ttl=600,
+    show_spinner="Carregando e tratando dados do Google Sheets..."
+)
+def carregar_e_tratar_dados(_conn, url_planilha):
+    df_base = _conn.read(
+        spreadsheet=url_planilha,
+        ttl=600
+    ).copy()
 
-# ──────────────────────────────────────────────
-# 5. CARGA E TRATAMENTO DOS DADOS
-# ──────────────────────────────────────────────
-try:
-    df = conn.read(spreadsheet=url_planilha, ttl="0")
-    df.columns = [str(c).strip() for c in df.columns]
+    df_base.columns = [str(c).strip() for c in df_base.columns]
 
-    if "SKU" in df.columns:
-        df["SKU"] = df["SKU"].apply(normalizar_sku)
-        
-    if "Filial" in df.columns:
-        df["Filial_Filtro"] = df["Filial"].apply(normalizar_filial)
+    if "SKU" in df_base.columns:
+        df_base["SKU"] = df_base["SKU"].apply(normalizar_sku)
+
+    if "Filial" in df_base.columns:
+        df_base["Filial_Filtro"] = df_base["Filial"].apply(normalizar_filial)
     else:
-        df["Filial_Filtro"] = ""
+        df_base["Filial_Filtro"] = ""
 
     for col_orig, col_num in [
         ("Receita", "Receita_Num"),
         ("Liquido", "Liquido_Num"),
         ("Custo medio", "Custo_Num"),
     ]:
-        df[col_num] = df[col_orig].apply(limpar_moeda) if col_orig in df.columns else 0.0
+        df_base[col_num] = (
+            df_base[col_orig].apply(limpar_moeda)
+            if col_orig in df_base.columns
+            else 0.0
+        )
 
-    df["Qtd_Num"] = pd.to_numeric(df.get("Quantidade vendida"), errors="coerce").fillna(0)
+    df_base["Qtd_Num"] = pd.to_numeric(
+        df_base.get("Quantidade vendida"),
+        errors="coerce"
+    ).fillna(0)
 
-    df["Data_Emissao_Filtro"] = parse_data_coluna(df, "Data emissao")
-    df["Data_Venda_Pura"] = parse_data_coluna(df, "Data da Venda")
+    df_base["Data_Emissao_Filtro"] = parse_data_coluna(df_base, "Data emissao")
+    df_base["Data_Venda_Pura"] = parse_data_coluna(df_base, "Data da Venda")
 
-    df["Data_Grafico"] = df["Data_Venda_Pura"].where(
-        df["Data_Venda_Pura"].notna(),
-        df["Data_Emissao_Filtro"]
+    df_base["Data_Grafico"] = df_base["Data_Venda_Pura"].where(
+        df_base["Data_Venda_Pura"].notna(),
+        df_base["Data_Emissao_Filtro"]
     )
 
-    df["Dia_Grafico"] = pd.to_datetime(df["Data_Grafico"], errors="coerce").dt.normalize()
+    df_base["Dia_Grafico"] = pd.to_datetime(
+        df_base["Data_Grafico"],
+        errors="coerce"
+    ).dt.normalize()
 
-    df["Eh_Devolucao"] = (
-        df["Grupo de Marketplace"]
+    df_base["Eh_Devolucao"] = (
+        df_base["Grupo de Marketplace"]
         .apply(normalizar_texto)
         .str.contains("DEVOLUCAO", na=False)
+        if "Grupo de Marketplace" in df_base.columns
+        else False
     )
 
-    # ── CHANGE 4: devoluções exibidas em valor absoluto ───────────────────────
     for col_num in ["Receita_Num", "Liquido_Num", "Custo_Num", "Qtd_Num"]:
-        df.loc[df["Eh_Devolucao"], col_num] = df.loc[df["Eh_Devolucao"], col_num].abs()
+        df_base.loc[df_base["Eh_Devolucao"], col_num] = (
+            df_base.loc[df_base["Eh_Devolucao"], col_num].abs()
+        )
 
-    df["img_url"] = df.apply(build_img_url, axis=1)
+    df_base["img_url"] = df_base.apply(build_img_url, axis=1)
+
+    return df_base
+    
+# ──────────────────────────────────────────────
+# 5. CARGA E TRATAMENTO DOS DADOS
+# ──────────────────────────────────────────────
+try:
+    df = carregar_e_tratar_dados(conn, url_planilha).copy()
 
     colunas_necessarias = ["Grupo de Marketplace", "Tipo pedido", "Data emissao"]
     if not all(col in df.columns for col in colunas_necessarias):
@@ -1206,6 +1231,10 @@ try:
     # 6. FILTROS LATERAIS
     # ──────────────────────────────────────────
     st.sidebar.header("Filtros")
+
+    if st.sidebar.button("Atualizar dados"):
+    carregar_e_tratar_dados.clear()
+    st.rerun()
     
     mkt_lista = sorted(
         df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
