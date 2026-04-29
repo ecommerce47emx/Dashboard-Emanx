@@ -1150,15 +1150,15 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
 @st.cache_data(
-    ttl=600,
+    ttl=1800,
     show_spinner="Carregando e tratando dados do Google Sheets..."
 )
 def carregar_e_tratar_dados(_conn, url_planilha):
     df_base = _conn.read(
         spreadsheet=url_planilha,
-        ttl=600
+        ttl=0
     ).copy()
-
+        
     df_base.columns = [str(c).strip() for c in df_base.columns]
 
     if "SKU" in df_base.columns:
