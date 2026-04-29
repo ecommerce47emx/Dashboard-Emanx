@@ -1458,7 +1458,7 @@ def montar_resumo_periodos_grafico(
     ini_ant,
     fim_ant
 ):
-    def calcular_linha(df_periodo, rotulo, ini, fim):
+    def calcular_numeros(df_periodo):
         receita = df_periodo["Receita_Num"].sum() if "Receita_Num" in df_periodo.columns else 0.0
         liquido = df_periodo["Liquido_Num"].sum() if "Liquido_Num" in df_periodo.columns else 0.0
         custo = df_periodo["Custo_Num"].sum() if "Custo_Num" in df_periodo.columns else 0.0
@@ -1468,15 +1468,44 @@ def montar_resumo_periodos_grafico(
         ticket_medio = receita / quantidade if quantidade > 0 else 0.0
 
         return {
-            "Período": rotulo,
-            "Intervalo": f"{pd.Timestamp(ini).strftime('%d/%m/%Y')} até {pd.Timestamp(fim).strftime('%d/%m/%Y')}",
-            "Receita Bruta": formatar_brl(receita),
-            "Líquido": formatar_brl(liquido),
-            "Custo": formatar_brl(custo),
-            "Quantidade": formatar_int(quantidade),
-            "Margem": formatar_pct(margem),
-            "Ticket Médio": formatar_brl(ticket_medio),
+            "receita": receita,
+            "liquido": liquido,
+            "custo": custo,
+            "quantidade": quantidade,
+            "margem": margem,
+            "ticket_medio": ticket_medio,
         }
+
+    def calcular_variacao(atual, anterior):
+        try:
+            atual = float(atual or 0)
+            anterior = float(anterior or 0)
+
+            if anterior == 0:
+                if atual == 0:
+                    return "0,0%"
+                return "Novo"
+
+            variacao = ((atual - anterior) / abs(anterior)) * 100
+            return f"{variacao:+.1f}%".replace(".", ",")
+        except Exception:
+            return "0,0%"
+
+    def calcular_variacao_margem(margem_atual, margem_anterior):
+        try:
+            margem_atual = float(margem_atual or 0)
+            margem_anterior = float(margem_anterior or 0)
+
+            variacao = (margem_atual - margem_anterior) * 100
+
+            if variacao > 0:
+                return f"+{variacao:.1f}%".replace(".", ",")
+            elif variacao < 0:
+                return f"{variacao:.1f}%".replace(".", ",")
+            else:
+                return "0,0%"
+        except Exception:
+            return "0,0%"
 
     base_valida = df_base[
         df_base[coluna_data].notna()
@@ -1496,9 +1525,40 @@ def montar_resumo_periodos_grafico(
         fim_ant
     )
 
+    atual = calcular_numeros(base_atual)
+    anterior = calcular_numeros(base_anterior)
+
     df_resumo = pd.DataFrame([
-        calcular_linha(base_atual, "Período Atual", data_ini, data_fim),
-        calcular_linha(base_anterior, "Período Anterior", ini_ant, fim_ant),
+        {
+            "Período": "Período Atual",
+            "Intervalo": f"{pd.Timestamp(data_ini).strftime('%d/%m/%Y')} até {pd.Timestamp(data_fim).strftime('%d/%m/%Y')}",
+            "Receita Bruta": formatar_brl(atual["receita"]),
+            "Líquido": formatar_brl(atual["liquido"]),
+            "Custo": formatar_brl(atual["custo"]),
+            "Quantidade": formatar_int(atual["quantidade"]),
+            "Margem": formatar_pct(atual["margem"]),
+            "Ticket Médio": formatar_brl(atual["ticket_medio"]),
+        },
+        {
+            "Período": "Período Anterior",
+            "Intervalo": f"{pd.Timestamp(ini_ant).strftime('%d/%m/%Y')} até {pd.Timestamp(fim_ant).strftime('%d/%m/%Y')}",
+            "Receita Bruta": formatar_brl(anterior["receita"]),
+            "Líquido": formatar_brl(anterior["liquido"]),
+            "Custo": formatar_brl(anterior["custo"]),
+            "Quantidade": formatar_int(anterior["quantidade"]),
+            "Margem": formatar_pct(anterior["margem"]),
+            "Ticket Médio": formatar_brl(anterior["ticket_medio"]),
+        },
+        {
+            "Período": "Variação",
+            "Intervalo": "Atual x Anterior",
+            "Receita Bruta": calcular_variacao(atual["receita"], anterior["receita"]),
+            "Líquido": calcular_variacao(atual["liquido"], anterior["liquido"]),
+            "Custo": calcular_variacao(atual["custo"], anterior["custo"]),
+            "Quantidade": calcular_variacao(atual["quantidade"], anterior["quantidade"]),
+            "Margem": calcular_variacao_margem(atual["margem"], anterior["margem"]),
+            "Ticket Médio": calcular_variacao(atual["ticket_medio"], anterior["ticket_medio"]),
+        },
     ])
 
     return df_resumo
