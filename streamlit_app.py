@@ -749,6 +749,21 @@ def calcular_delta_percentual(atual, anterior):
     texto, _ = obter_delta_info(atual, anterior)
     return texto
 
+def calcular_delta_pontos_percentuais(atual, anterior):
+    try:
+        atual = float(atual or 0)
+        anterior = float(anterior or 0)
+
+        delta_pp = (atual - anterior) * 100
+
+        if delta_pp > 0:
+            return f"+{delta_pp:.1f} p.p.".replace(".", ",")
+        elif delta_pp < 0:
+            return f"{delta_pp:.1f} p.p.".replace(".", ",")
+        else:
+            return "0,0 p.p."
+    except Exception:
+        return "0,0 p.p."
 
 def formatar_chip_delta(atual, anterior):
     texto, classe = obter_delta_info(atual, anterior)
@@ -1750,6 +1765,12 @@ try:
     custo_anterior = df_prev["Custo_Num"].sum()
     qtd_anterior = int(df_prev["Qtd_Num"].sum())
     pedidos_anterior = len(df_prev)
+
+    margem_total = calcular_margem_pct(liquido_total, custo_total)
+    margem_anterior = calcular_margem_pct(liquido_anterior, custo_anterior)
+    
+    ticket_medio = (receita_total / qtd_total) if qtd_total > 0 else 0.0
+    ticket_medio_anterior = (receita_anterior / qtd_anterior) if qtd_anterior > 0 else 0.0
     
     if "Fornecedor" in df_f.columns:
         receita_lotes = df_f.loc[
@@ -1770,27 +1791,37 @@ try:
     
     rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
     
-    linha1 = st.columns(4)
-    linha2 = st.columns(4)
+    linha1 = st.columns(5)
+    linha2 = st.columns(5)
     
     linha1[0].metric(
         "Receita Total",
         formatar_brl(receita_total),
         calcular_delta_percentual(receita_total, receita_anterior)
     )
+    
     linha1[1].metric(
         "Líquido Total",
         formatar_brl(liquido_total),
         calcular_delta_percentual(liquido_total, liquido_anterior)
     )
+    
     linha1[2].metric(
         "Custo Total",
         formatar_brl(custo_total),
         calcular_delta_percentual(custo_total, custo_anterior)
     )
+    
     linha1[3].metric(
-        "Receita Novos",
-        formatar_pct(pct_receita_complementar)
+        "Margem",
+        formatar_pct(margem_total),
+        calcular_delta_pontos_percentuais(margem_total, margem_anterior)
+    )
+    
+    linha1[4].metric(
+        "Ticket Médio",
+        formatar_brl(ticket_medio),
+        calcular_delta_percentual(ticket_medio, ticket_medio_anterior)
     )
     
     linha2[0].metric(
@@ -1798,6 +1829,7 @@ try:
         formatar_int(qtd_total),
         calcular_delta_percentual(qtd_total, qtd_anterior)
     )
+    
     linha2[1].metric(
         "Total de Pedidos",
         formatar_int(total_pedidos),
@@ -1812,10 +1844,14 @@ try:
         linha2[2].metric("Projeção do Mês", "N/D")
     
     linha2[3].metric(
+        "Receita Novos",
+        formatar_pct(pct_receita_complementar)
+    )
+    
+    linha2[4].metric(
         "Receita Lotes",
         formatar_pct(pct_receita_lotes)
     )
-    
     if info_proj["status"] == "em_andamento":
         st.caption(
             f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
