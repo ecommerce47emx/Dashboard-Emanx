@@ -1573,7 +1573,6 @@ def estilizar_variacao_resumo(row):
 
         if coluna in ["Período", "Intervalo"]:
             estilos.append(
-                "font-weight:700; "
                 "background-color:rgba(100,116,139,0.10); "
                 "color:#334155;"
             )
@@ -1583,19 +1582,16 @@ def estilizar_variacao_resumo(row):
 
         if texto.startswith("+") or texto == "Novo":
             estilos.append(
-                "font-weight:700; "
                 "background-color:rgba(34,197,94,0.16); "
                 "color:#15803d;"
             )
         elif texto.startswith("-"):
             estilos.append(
-                "font-weight:700; "
                 "background-color:rgba(239,68,68,0.16); "
                 "color:#dc2626;"
             )
         else:
             estilos.append(
-                "font-weight:700; "
                 "background-color:rgba(100,116,139,0.10); "
                 "color:#475569;"
             )
