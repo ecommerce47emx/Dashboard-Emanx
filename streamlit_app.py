@@ -874,6 +874,51 @@ def periodo_anterior(data_ini, data_fim, modo_periodo="Personalizado"):
 
     return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
 
+def calcular_dominio_y_grafico(df_plot, coluna_valor="Valor"):
+    if df_plot.empty or coluna_valor not in df_plot.columns:
+        return [0, 1]
+
+    valores = pd.to_numeric(df_plot[coluna_valor], errors="coerce").dropna()
+
+    # Ignora zeros para não achatar o gráfico quando algum dia reindexado veio sem venda
+    valores_positivos = valores[valores > 0]
+
+    if valores_positivos.empty:
+        return [0, 1]
+
+    valor_min = float(valores_positivos.min())
+    valor_max = float(valores_positivos.max())
+
+    if valor_min == valor_max:
+        margem = valor_max * 0.10 if valor_max > 0 else 1
+        return [
+            max(0, valor_min - margem),
+            valor_max + margem
+        ]
+
+    amplitude = valor_max - valor_min
+
+    # Define um arredondamento proporcional ao tamanho dos valores
+    if valor_max >= 100000:
+        passo = 10000
+    elif valor_max >= 50000:
+        passo = 5000
+    elif valor_max >= 10000:
+        passo = 1000
+    elif valor_max >= 1000:
+        passo = 500
+    else:
+        passo = 100
+
+    y_min = max(0, (valor_min // passo) * passo)
+    y_max = ((valor_max // passo) + 1) * passo
+
+    # Garante um respiro mínimo no topo
+    if y_max <= valor_max:
+        y_max = valor_max + amplitude * 0.10
+
+    return [y_min, y_max]
+
 def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     df_plot = df_cmp.copy()
 
@@ -885,12 +930,25 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     )
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
+    dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
+
     return (
         alt.Chart(df_plot)
         .mark_line(point=True, strokeWidth=3)
         .encode(
-            x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
-            y=alt.Y("Valor:Q", title="Receita (R$)"),
+            x=alt.X(
+                "Posicao_Label:O",
+                title="Dia dentro do período"
+            ),
+            y=alt.Y(
+                "Valor:Q",
+                title="Receita (R$)",
+                scale=alt.Scale(
+                    domain=dominio_y,
+                    zero=False,
+                    nice=False
+                )
+            ),
             color=alt.Color(
                 "Serie:N",
                 title="Série",
@@ -912,8 +970,9 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
                 alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
             ],
         )
-        .properties(height=320)
+        .properties(height=460)
     )
+
 def montar_df_lotes_complementar(df_base, data_ini, data_fim):
     base_valida = df_base[
         df_base["Dia_Grafico"].notna()
@@ -980,12 +1039,25 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
     )
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
+    dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
+
     return (
         alt.Chart(df_plot)
         .mark_line(point=True, strokeWidth=3)
         .encode(
-            x=alt.X("Posicao_Label:O", title="Dia dentro do período"),
-            y=alt.Y("Valor:Q", title="Receita (R$)"),
+            x=alt.X(
+                "Posicao_Label:O",
+                title="Dia dentro do período"
+            ),
+            y=alt.Y(
+                "Valor:Q",
+                title="Receita (R$)",
+                scale=alt.Scale(
+                    domain=dominio_y,
+                    zero=False,
+                    nice=False
+                )
+            ),
             color=alt.Color(
                 "Serie:N",
                 title="Série",
@@ -1007,8 +1079,9 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
                 alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
             ],
         )
-        .properties(height=320)
+        .properties(height=460)
     )
+
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
         return df_base.iloc[0:0].copy()
