@@ -2339,11 +2339,21 @@ try:
             fim_ant=fim_ant_chart,
         )
         
-        st.dataframe(
-            df_resumo_periodos.style.apply(estilizar_variacao_resumo, axis=1),
-            hide_index=True,
-            width="stretch",
-            height=145
+        try:
+            st.dataframe(
+                df_resumo_periodos.style.apply(estilizar_variacao_resumo, axis=1),
+                hide_index=True,
+                width="stretch",
+                height=140
+            )
+        except Exception as e:
+            st.warning(f"Não foi possível aplicar a estilização da tabela: {e}")
+            st.dataframe(
+                df_resumo_periodos,
+                hide_index=True,
+                width="stretch",
+                height=140
+            )
         )
         chart = criar_grafico_comparativo(df_cmp)
         
