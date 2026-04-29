@@ -1164,6 +1164,149 @@ def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim
 
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
+def opcoes_unicas(df_base, coluna):
+    if coluna not in df_base.columns or df_base.empty:
+        return []
+
+    valores = (
+        df_base[coluna]
+        .dropna()
+        .tolist()
+    )
+
+    valores = [v for v in valores if str(v).strip() != ""]
+
+    return sorted(list(pd.unique(valores)), key=lambda x: str(x))
+
+
+def limpar_multiselect_invalido(chave, opcoes):
+    if chave not in st.session_state:
+        return
+
+    opcoes_validas = set(opcoes)
+    valores_atuais = st.session_state.get(chave, [])
+
+    if not isinstance(valores_atuais, list):
+        valores_atuais = []
+
+    st.session_state[chave] = [
+        v for v in valores_atuais
+        if v in opcoes_validas
+    ]
+
+
+def multiselect_dinamico(label, options, key, placeholder):
+    limpar_multiselect_invalido(key, options)
+
+    return st.sidebar.multiselect(
+        label,
+        options=options,
+        key=key,
+        placeholder=placeholder,
+    )
+
+
+def aplicar_filtros_para_opcoes(
+    df_base,
+    data_ini=None,
+    data_fim=None,
+    marketplaces_sel=None,
+    filiais_sel=None,
+    tipos_pedido_sel=None,
+    marcas_sel=None,
+    categorias_sel=None,
+    fornecedores_sel=None,
+    incluir_devolucao=False,
+    somente_fulfillment=False,
+    ignorar=None,
+):
+    ignorar = set(ignorar or [])
+
+    marketplaces_sel = marketplaces_sel or []
+    filiais_sel = filiais_sel or []
+    tipos_pedido_sel = tipos_pedido_sel or []
+    marcas_sel = marcas_sel or []
+    categorias_sel = categorias_sel or []
+    fornecedores_sel = fornecedores_sel or []
+
+    df_out = df_base.copy()
+
+    if (
+        "periodo" not in ignorar
+        and data_ini is not None
+        and data_fim is not None
+        and "Data_Emissao_Filtro" in df_out.columns
+    ):
+        df_out = filtrar_intervalo(
+            df_out,
+            "Data_Emissao_Filtro",
+            data_ini,
+            data_fim
+        )
+
+    if "devolucao" not in ignorar and "Eh_Devolucao" in df_out.columns:
+        if incluir_devolucao:
+            df_out = df_out[df_out["Eh_Devolucao"]].copy()
+        else:
+            df_out = df_out[~df_out["Eh_Devolucao"]].copy()
+
+    if (
+        "marketplace" not in ignorar
+        and marketplaces_sel
+        and not incluir_devolucao
+        and "Grupo de Marketplace" in df_out.columns
+    ):
+        df_out = df_out[df_out["Grupo de Marketplace"].isin(marketplaces_sel)]
+
+    if (
+        "filial" not in ignorar
+        and filiais_sel
+        and "Filial_Filtro" in df_out.columns
+    ):
+        df_out = df_out[df_out["Filial_Filtro"].isin(filiais_sel)]
+
+    if (
+        "fulfillment" not in ignorar
+        and somente_fulfillment
+        and "Tipo pedido" in df_out.columns
+    ):
+        df_out = df_out[
+            df_out["Tipo pedido"]
+            .apply(normalizar_texto)
+            .str.contains("FULL", na=False)
+        ]
+
+    if (
+        "tipo_pedido" not in ignorar
+        and not somente_fulfillment
+        and tipos_pedido_sel
+        and "Tipo pedido" in df_out.columns
+    ):
+        df_out = df_out[df_out["Tipo pedido"].isin(tipos_pedido_sel)]
+
+    if (
+        "marca" not in ignorar
+        and marcas_sel
+        and "Marca" in df_out.columns
+    ):
+        df_out = df_out[df_out["Marca"].isin(marcas_sel)]
+
+    if (
+        "categoria" not in ignorar
+        and categorias_sel
+        and "Categoria" in df_out.columns
+    ):
+        df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
+
+    if (
+        "fornecedor" not in ignorar
+        and fornecedores_sel
+        and "Fornecedor" in df_out.columns
+    ):
+        df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
+
+    return df_out
+
 @st.cache_data(
     ttl=1800,
     show_spinner="Carregando e tratando dados do Google Sheets..."
@@ -1246,7 +1389,7 @@ try:
     # 6. FILTROS LATERAIS
     # ──────────────────────────────────────────
     st.sidebar.header("Filtros")
-
+    
     if st.sidebar.button("Atualizar dados"):
         carregar_e_tratar_dados.clear()
     
@@ -1256,102 +1399,14 @@ try:
     
         st.rerun()
     
-    mkt_lista = sorted(
-        df.loc[~df["Eh_Devolucao"], "Grupo de Marketplace"].dropna().unique()
-    )
-    
-    mkt_sel = st.sidebar.multiselect(
-        "Marketplace",
-        options=mkt_lista,
-        default=[],
-        placeholder="Todos os marketplaces",
-    )
-    
-    somente_fulfillment = st.sidebar.toggle(
-        "Somente Fulfillment",
-        value=False
-    )
-    
-    incluir_devolucao = st.sidebar.toggle(
-        "Somente Devolução",
-        value=False
-    )
-    
-    somente_margem_negativa = st.sidebar.toggle(
-        "Somente Margem Negativa",
-        value=False
-    )
-    
-    filiais_lista = ["00001", "00008", "00016", "20301"]
-    
-    filial_sel = st.sidebar.multiselect(
-        "Filial",
-        options=filiais_lista,
-        default=[],
-        placeholder="Todas as filiais",
-    )
-    
-    if "Tipo pedido" in df.columns:
-        tipo_pedido_lista = sorted(
-            df["Tipo pedido"]
-            .dropna()
-            .astype(str)
-            .str.strip()
-            .unique()
-        )
-    
-        tipo_pedido_sel = st.sidebar.multiselect(
-            "Tipo de Pedido",
-            options=tipo_pedido_lista,
-            default=[],
-            placeholder="Todos os tipos de pedido",
-        )
-    else:
-        tipo_pedido_sel = []
-    
-    if "Marca" in df.columns:
-        marca_lista = sorted(df["Marca"].dropna().unique())
-        marca_sel = st.sidebar.multiselect(
-            "Marca",
-            options=marca_lista,
-            default=[],
-            placeholder="Todas as marcas",
-        )
-    else:
-        marca_sel = []
-    
-    if "Categoria" in df.columns:
-        categoria_lista = sorted(df["Categoria"].dropna().unique())
-        categoria_sel = st.sidebar.multiselect(
-            "Categoria",
-            options=categoria_lista,
-            default=[],
-            placeholder="Todas as categorias",
-        )
-    else:
-        categoria_sel = []
-    
-    if "Fornecedor" in df.columns:
-        fornecedor_lista = sorted(df["Fornecedor"].dropna().unique())
-        fornecedor_sel = st.sidebar.multiselect(
-            "Fornecedor",
-            options=fornecedor_lista,
-            default=[],
-            placeholder="Todos os fornecedores",
-        )
-    else:
-        fornecedor_sel = []
-
     # ──────────────────────────────────────────
-    # 6.1 FILTRO DE PERÍODO
+    # 6.1 PREPARO DO PERÍODO PARA FILTROS DINÂMICOS
     # ──────────────────────────────────────────
     data_ini = None
     data_fim = None
     periodo_rapido = "Personalizado"
     
     datas_validas = df["Data_Emissao_Filtro"].dropna()
-    
-    hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
     
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
@@ -1367,13 +1422,171 @@ try:
             default_ini = data_min
             default_fim = data_max
     
-        st.sidebar.markdown("**Período Rápido**")
-    
         if "periodo_rapido" not in st.session_state:
             st.session_state["periodo_rapido"] = "Mês Atual"
     
         if "periodo_datas" not in st.session_state:
             st.session_state["periodo_datas"] = (default_ini, default_fim)
+    
+        periodo_estado = st.session_state.get(
+            "periodo_datas",
+            (default_ini, default_fim)
+        )
+    
+        if isinstance(periodo_estado, (list, tuple)) and len(periodo_estado) == 2:
+            data_ini_opcoes = pd.Timestamp(periodo_estado[0]).normalize()
+            data_fim_opcoes = pd.Timestamp(periodo_estado[1]).normalize()
+        else:
+            data_ini_opcoes = pd.Timestamp(default_ini).normalize()
+            data_fim_opcoes = pd.Timestamp(default_fim).normalize()
+    else:
+        data_min = None
+        data_max = None
+        data_ref = None
+        data_ini_opcoes = None
+        data_fim_opcoes = None
+    
+    # ──────────────────────────────────────────
+    # 6.2 ESTADO ATUAL DOS FILTROS
+    # ──────────────────────────────────────────
+    mkt_atual = st.session_state.get("filtro_marketplace", [])
+    filial_atual = st.session_state.get("filtro_filial", [])
+    tipo_pedido_atual = st.session_state.get("filtro_tipo_pedido", [])
+    marca_atual = st.session_state.get("filtro_marca", [])
+    categoria_atual = st.session_state.get("filtro_categoria", [])
+    fornecedor_atual = st.session_state.get("filtro_fornecedor", [])
+    
+    somente_fulfillment_atual = bool(
+        st.session_state.get("filtro_somente_fulfillment", False)
+    )
+    
+    incluir_devolucao_atual = bool(
+        st.session_state.get("filtro_somente_devolucao", False)
+    )
+    
+    # ──────────────────────────────────────────
+    # 6.3 FUNÇÃO LOCAL PARA GERAR OPÇÕES DINÂMICAS
+    # ──────────────────────────────────────────
+    def base_para_opcoes(ignorar):
+        return aplicar_filtros_para_opcoes(
+            df_base=df,
+            data_ini=data_ini_opcoes,
+            data_fim=data_fim_opcoes,
+            marketplaces_sel=mkt_atual,
+            filiais_sel=filial_atual,
+            tipos_pedido_sel=tipo_pedido_atual,
+            marcas_sel=marca_atual,
+            categorias_sel=categoria_atual,
+            fornecedores_sel=fornecedor_atual,
+            incluir_devolucao=incluir_devolucao_atual,
+            somente_fulfillment=somente_fulfillment_atual,
+            ignorar=ignorar,
+        )
+    
+    # ──────────────────────────────────────────
+    # 6.4 FILTROS DINÂMICOS
+    # ──────────────────────────────────────────
+    mkt_lista = opcoes_unicas(
+        base_para_opcoes(["marketplace"]),
+        "Grupo de Marketplace"
+    )
+    
+    mkt_sel = multiselect_dinamico(
+        "Marketplace",
+        options=mkt_lista,
+        key="filtro_marketplace",
+        placeholder="Todos os marketplaces",
+    )
+    
+    somente_fulfillment = st.sidebar.toggle(
+        "Somente Fulfillment",
+        value=False,
+        key="filtro_somente_fulfillment",
+    )
+    
+    incluir_devolucao = st.sidebar.toggle(
+        "Somente Devolução",
+        value=False,
+        key="filtro_somente_devolucao",
+    )
+    
+    somente_margem_negativa = st.sidebar.toggle(
+        "Somente Margem Negativa",
+        value=False,
+        key="filtro_somente_margem_negativa",
+    )
+    
+    filiais_validas_base = opcoes_unicas(
+        base_para_opcoes(["filial"]),
+        "Filial_Filtro"
+    )
+    
+    filiais_lista_base = ["00001", "00008", "00016", "20301"]
+    filiais_lista = [
+        filial for filial in filiais_lista_base
+        if filial in filiais_validas_base
+    ]
+    
+    filial_sel = multiselect_dinamico(
+        "Filial",
+        options=filiais_lista,
+        key="filtro_filial",
+        placeholder="Todas as filiais",
+    )
+    
+    tipo_pedido_lista = opcoes_unicas(
+        base_para_opcoes(["tipo_pedido"]),
+        "Tipo pedido"
+    )
+    
+    tipo_pedido_sel = multiselect_dinamico(
+        "Tipo de Pedido",
+        options=tipo_pedido_lista,
+        key="filtro_tipo_pedido",
+        placeholder="Todos os tipos de pedido",
+    )
+    
+    marca_lista = opcoes_unicas(
+        base_para_opcoes(["marca"]),
+        "Marca"
+    )
+    
+    marca_sel = multiselect_dinamico(
+        "Marca",
+        options=marca_lista,
+        key="filtro_marca",
+        placeholder="Todas as marcas",
+    )
+    
+    categoria_lista = opcoes_unicas(
+        base_para_opcoes(["categoria"]),
+        "Categoria"
+    )
+    
+    categoria_sel = multiselect_dinamico(
+        "Categoria",
+        options=categoria_lista,
+        key="filtro_categoria",
+        placeholder="Todas as categorias",
+    )
+    
+    fornecedor_lista = opcoes_unicas(
+        base_para_opcoes(["fornecedor"]),
+        "Fornecedor"
+    )
+    
+    fornecedor_sel = multiselect_dinamico(
+        "Fornecedor",
+        options=fornecedor_lista,
+        key="filtro_fornecedor",
+        placeholder="Todos os fornecedores",
+    )
+    
+    # ──────────────────────────────────────────
+    # 6.5 FILTRO DE PERÍODO
+    # ──────────────────────────────────────────
+    if not datas_validas.empty:
+        st.sidebar.markdown("**Período Rápido**")
     
         periodo_rapido = st.sidebar.radio(
             "Selecione um atalho",
@@ -1445,7 +1658,6 @@ try:
         st.sidebar.caption(
             f"Última data na base: {pd.Timestamp(data_ref).strftime('%d/%m/%Y')}"
         )
-    
     else:
         data_ini = None
         data_fim = None
