@@ -970,7 +970,7 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
                 alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
             ],
         )
-        .properties(height=460)
+        .properties(height=380)
     )
 
 def montar_df_lotes_complementar(df_base, data_ini, data_fim):
@@ -1079,7 +1079,7 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
                 alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
             ],
         )
-        .properties(height=460)
+        .properties(height=380)
     )
 
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
