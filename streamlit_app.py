@@ -1234,6 +1234,11 @@ try:
 
     if st.sidebar.button("Atualizar dados"):
         carregar_e_tratar_dados.clear()
+    
+        for chave in ["periodo_datas", "periodo_rapido"]:
+            if chave in st.session_state:
+                del st.session_state[chave]
+    
         st.rerun()
     
     mkt_lista = sorted(
@@ -1328,32 +1333,33 @@ try:
     data_ini = None
     data_fim = None
     periodo_rapido = "Personalizado"
-
+    
     datas_validas = df["Data_Emissao_Filtro"].dropna()
-
+    
     hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
-    ontem_sp = hoje_sp - pd.Timedelta(days=1)
-    inicio_mes_atual = hoje_sp.replace(day=1)
-
+    
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
         data_max = datas_validas.max().date()
-
-        default_ini = max(data_min, inicio_mes_atual.date())
-        default_fim = min(data_max, ontem_sp.date())
-
+    
+        data_ref = data_max
+        inicio_mes_ref = pd.Timestamp(data_ref).replace(day=1).date()
+    
+        default_ini = max(data_min, inicio_mes_ref)
+        default_fim = data_ref
+    
         if default_ini > default_fim:
             default_ini = data_min
             default_fim = data_max
-
+    
         st.sidebar.markdown("**Período Rápido**")
-
+    
         if "periodo_rapido" not in st.session_state:
             st.session_state["periodo_rapido"] = "Mês Atual"
-
+    
         if "periodo_datas" not in st.session_state:
             st.session_state["periodo_datas"] = (default_ini, default_fim)
-
+    
         periodo_rapido = st.sidebar.radio(
             "Selecione um atalho",
             options=[
@@ -1367,44 +1373,44 @@ try:
             label_visibility="collapsed",
             horizontal=False,
         )
-
+    
         if periodo_rapido == "Mês Atual":
             periodo_value = (default_ini, default_fim)
             st.session_state["periodo_datas"] = periodo_value
-
+    
         elif periodo_rapido == "Últimos 7 dias":
-            _ini_rapido = (ontem_sp - pd.Timedelta(days=6)).date()
-            _fim_rapido = ontem_sp.date()
-
+            _fim_rapido = data_ref
+            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=6)).date()
+    
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
-
+    
             periodo_value = (_ini_rapido, _fim_rapido)
             st.session_state["periodo_datas"] = periodo_value
-
+    
         elif periodo_rapido == "Últimos 15 dias":
-            _ini_rapido = (ontem_sp - pd.Timedelta(days=14)).date()
-            _fim_rapido = ontem_sp.date()
-
+            _fim_rapido = data_ref
+            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=14)).date()
+    
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
-
+    
             periodo_value = (_ini_rapido, _fim_rapido)
             st.session_state["periodo_datas"] = periodo_value
-
+    
         elif periodo_rapido == "Últimos 30 dias":
-            _ini_rapido = (ontem_sp - pd.Timedelta(days=29)).date()
-            _fim_rapido = ontem_sp.date()
-
+            _fim_rapido = data_ref
+            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=29)).date()
+    
             _ini_rapido = max(_ini_rapido, data_min)
             _fim_rapido = min(_fim_rapido, data_max)
-
+    
             periodo_value = (_ini_rapido, _fim_rapido)
             st.session_state["periodo_datas"] = periodo_value
-
+    
         else:
             periodo_value = st.session_state["periodo_datas"]
-
+    
         periodo = st.sidebar.date_input(
             "Período de Venda",
             value=st.session_state["periodo_datas"],
@@ -1413,13 +1419,18 @@ try:
             key="periodo_datas",
             on_change=ao_mudar_periodo_manual,
         )
-
+    
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
             data_ini = pd.Timestamp(periodo[0]).normalize()
             data_fim = pd.Timestamp(periodo[1]).normalize()
         else:
             data_ini = pd.Timestamp(st.session_state["periodo_datas"][0]).normalize()
             data_fim = pd.Timestamp(st.session_state["periodo_datas"][1]).normalize()
+    
+        st.sidebar.caption(
+            f"Última data na base: {pd.Timestamp(data_ref).strftime('%d/%m/%Y')}"
+        )
+    
     else:
         data_ini = None
         data_fim = None
