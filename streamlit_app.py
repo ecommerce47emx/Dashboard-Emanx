@@ -1563,6 +1563,45 @@ def montar_resumo_periodos_grafico(
 
     return df_resumo
 
+def estilizar_variacao_resumo(row):
+    estilos = []
+
+    for coluna, valor in row.items():
+        if row.get("Período") != "Variação":
+            estilos.append("")
+            continue
+
+        if coluna in ["Período", "Intervalo"]:
+            estilos.append(
+                "font-weight:700; "
+                "background-color:rgba(100,116,139,0.10); "
+                "color:#334155;"
+            )
+            continue
+
+        texto = str(valor).strip()
+
+        if texto.startswith("+") or texto == "Novo":
+            estilos.append(
+                "font-weight:700; "
+                "background-color:rgba(34,197,94,0.16); "
+                "color:#15803d;"
+            )
+        elif texto.startswith("-"):
+            estilos.append(
+                "font-weight:700; "
+                "background-color:rgba(239,68,68,0.16); "
+                "color:#dc2626;"
+            )
+        else:
+            estilos.append(
+                "font-weight:700; "
+                "background-color:rgba(100,116,139,0.10); "
+                "color:#475569;"
+            )
+
+    return estilos
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -2305,12 +2344,11 @@ try:
         )
         
         st.dataframe(
-            df_resumo_periodos,
+            df_resumo_periodos.style.apply(estilizar_variacao_resumo, axis=1),
             hide_index=True,
             width="stretch",
-            height=140
+            height=145
         )
-        
         chart = criar_grafico_comparativo(df_cmp)
         
         st.altair_chart(chart, width="stretch")
