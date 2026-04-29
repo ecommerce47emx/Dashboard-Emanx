@@ -1449,7 +1449,60 @@ def carregar_e_tratar_dados(_conn, url_planilha):
     df_base["img_url"] = df_base.apply(build_img_url, axis=1)
 
     return df_base
-    
+
+def montar_resumo_periodos_grafico(
+    df_base,
+    coluna_data,
+    data_ini,
+    data_fim,
+    ini_ant,
+    fim_ant
+):
+    def calcular_linha(df_periodo, rotulo, ini, fim):
+        receita = df_periodo["Receita_Num"].sum() if "Receita_Num" in df_periodo.columns else 0.0
+        liquido = df_periodo["Liquido_Num"].sum() if "Liquido_Num" in df_periodo.columns else 0.0
+        custo = df_periodo["Custo_Num"].sum() if "Custo_Num" in df_periodo.columns else 0.0
+        quantidade = df_periodo["Qtd_Num"].sum() if "Qtd_Num" in df_periodo.columns else 0.0
+
+        margem = calcular_margem_pct(liquido, custo)
+        ticket_medio = receita / quantidade if quantidade > 0 else 0.0
+
+        return {
+            "Período": rotulo,
+            "Intervalo": f"{pd.Timestamp(ini).strftime('%d/%m/%Y')} até {pd.Timestamp(fim).strftime('%d/%m/%Y')}",
+            "Receita Bruta": formatar_brl(receita),
+            "Líquido": formatar_brl(liquido),
+            "Custo": formatar_brl(custo),
+            "Quantidade": formatar_int(quantidade),
+            "Margem": formatar_pct(margem),
+            "Ticket Médio": formatar_brl(ticket_medio),
+        }
+
+    base_valida = df_base[
+        df_base[coluna_data].notna()
+    ].copy()
+
+    base_atual = filtrar_intervalo(
+        base_valida,
+        coluna_data,
+        data_ini,
+        data_fim
+    )
+
+    base_anterior = filtrar_intervalo(
+        base_valida,
+        coluna_data,
+        ini_ant,
+        fim_ant
+    )
+
+    df_resumo = pd.DataFrame([
+        calcular_linha(base_atual, "Período Atual", data_ini, data_fim),
+        calcular_linha(base_anterior, "Período Anterior", ini_ant, fim_ant),
+    ])
+
+    return df_resumo
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -2181,9 +2234,25 @@ try:
             data_fim=data_fim,
             modo_periodo=periodo_rapido,
         )
-    
+        
+        df_resumo_periodos = montar_resumo_periodos_grafico(
+            df_base=df_grafico_base,
+            coluna_data="Dia_Grafico",
+            data_ini=data_ini,
+            data_fim=data_fim,
+            ini_ant=ini_ant_chart,
+            fim_ant=fim_ant_chart,
+        )
+        
+        st.dataframe(
+            df_resumo_periodos,
+            hide_index=True,
+            width="stretch",
+            height=108
+        )
+        
         chart = criar_grafico_comparativo(df_cmp)
-    
+        
         st.altair_chart(chart, width="stretch")
     
         st.caption(
