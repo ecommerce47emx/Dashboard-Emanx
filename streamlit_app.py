@@ -1168,15 +1168,19 @@ def opcoes_unicas(df_base, coluna):
     if coluna not in df_base.columns or df_base.empty:
         return []
 
-    valores = (
-        df_base[coluna]
-        .dropna()
-        .tolist()
+    serie = df_base[coluna].dropna()
+
+    serie = serie[
+        serie.astype(str).str.strip() != ""
+    ]
+
+    if serie.empty:
+        return []
+
+    return sorted(
+        serie.drop_duplicates().tolist(),
+        key=lambda x: str(x)
     )
-
-    valores = [v for v in valores if str(v).strip() != ""]
-
-    return sorted(list(pd.unique(valores)), key=lambda x: str(x))
 
 
 def limpar_multiselect_invalido(chave, opcoes):
