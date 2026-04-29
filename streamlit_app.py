@@ -754,16 +754,16 @@ def calcular_delta_pontos_percentuais(atual, anterior):
         atual = float(atual or 0)
         anterior = float(anterior or 0)
 
-        delta_pp = (atual - anterior) * 100
+        delta_pct = (atual - anterior) * 100
 
-        if delta_pp > 0:
-            return f"+{delta_pp:.1f} p.p.".replace(".", ",")
-        elif delta_pp < 0:
-            return f"{delta_pp:.1f} p.p.".replace(".", ",")
+        if delta_pct > 0:
+            return f"+{delta_pct:.1f}%".replace(".", ",")
+        elif delta_pct < 0:
+            return f"{delta_pct:.1f}%".replace(".", ",")
         else:
-            return "0,0 p.p."
+            return "0,0%"
     except Exception:
-        return "0,0 p.p."
+        return "0,0%"
 
 def formatar_chip_delta(atual, anterior):
     texto, classe = obter_delta_info(atual, anterior)
