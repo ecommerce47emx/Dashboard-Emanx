@@ -2308,7 +2308,7 @@ try:
             df_resumo_periodos,
             hide_index=True,
             width="stretch",
-            height=108
+            height=190
         )
         
         chart = criar_grafico_comparativo(df_cmp)
