@@ -1567,6 +1567,142 @@ def preparar_tabela_resumo_periodos(df_resumo):
 
     return df_tabela
 
+def montar_resumo_marketplace_tipo_pedido(df_base, filtro_mkt_ativo=False):
+    if df_base.empty:
+        return pd.DataFrame()
+
+    colunas_necessarias = [
+        "Grupo de Marketplace",
+        "Receita_Num",
+        "Liquido_Num",
+        "Custo_Num",
+        "Qtd_Num",
+    ]
+
+    if not all(col in df_base.columns for col in colunas_necessarias):
+        return pd.DataFrame()
+
+    base = df_base[
+        df_base["Grupo de Marketplace"].notna() &
+        (df_base["Grupo de Marketplace"].astype(str).str.strip() != "")
+    ].copy()
+
+    if base.empty:
+        return pd.DataFrame()
+
+    detalhar_tipo_pedido = (
+        filtro_mkt_ativo and
+        "Tipo pedido" in base.columns
+    )
+
+    if detalhar_tipo_pedido:
+        base["Tipo pedido"] = base["Tipo pedido"].fillna("").astype(str).str.strip()
+        base.loc[base["Tipo pedido"] == "", "Tipo pedido"] = "Não informado"
+
+        campos_grupo = ["Grupo de Marketplace", "Tipo pedido"]
+    else:
+        campos_grupo = ["Grupo de Marketplace"]
+
+    resumo = (
+        base.groupby(campos_grupo, as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Liquido=("Liquido_Num", "sum"),
+            Custo=("Custo_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+        )
+    )
+
+    if resumo.empty:
+        return pd.DataFrame()
+
+    total_receita = float(resumo["Receita"].sum())
+
+    resumo["Margem_Pct"] = resumo.apply(
+        lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
+        axis=1
+    )
+
+    resumo["Ticket_Medio"] = resumo.apply(
+        lambda row: (row["Receita"] / row["Quantidade"]) if row["Quantidade"] > 0 else 0.0,
+        axis=1
+    )
+
+    resumo["Percentual_Total"] = resumo["Receita"].apply(
+        lambda x: (x / total_receita) if total_receita > 0 else 0.0
+    )
+
+    if detalhar_tipo_pedido:
+        resumo["Receita_Total_Marketplace"] = resumo.groupby("Grupo de Marketplace")["Receita"].transform("sum")
+
+        resumo = resumo.sort_values(
+            by=["Receita_Total_Marketplace", "Grupo de Marketplace", "Receita"],
+            ascending=[False, True, False]
+        ).reset_index(drop=True)
+    else:
+        resumo = resumo.sort_values(
+            by="Receita",
+            ascending=False
+        ).reset_index(drop=True)
+
+    resumo["Marketplace"] = resumo["Grupo de Marketplace"]
+    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
+    resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
+    resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
+    resumo["Quantidade"] = resumo["Quantidade"].apply(formatar_int)
+    resumo["Margem"] = resumo["Margem_Pct"].apply(formatar_pct)
+    resumo["Ticket Médio"] = resumo["Ticket_Medio"].apply(formatar_brl)
+
+    if detalhar_tipo_pedido:
+        resumo["Tipo de Pedido"] = resumo["Tipo pedido"]
+
+        return resumo[
+            [
+                "Marketplace",
+                "Tipo de Pedido",
+                "Percentual do Total",
+                "Receita Bruta",
+                "Líquido",
+                "Custo",
+                "Quantidade",
+                "Margem",
+                "Ticket Médio",
+            ]
+        ]
+
+    return resumo[
+        [
+            "Marketplace",
+            "Percentual do Total",
+            "Receita Bruta",
+            "Líquido",
+            "Custo",
+            "Quantidade",
+            "Margem",
+            "Ticket Médio",
+        ]
+    ]
+
+
+def preparar_tabela_resumo_marketplace_tipo_pedido(df_resumo, filtro_mkt_ativo=False):
+    df_tabela = df_resumo.copy()
+
+    if df_tabela.empty:
+        return df_tabela
+
+    if "Marketplace" in df_tabela.columns:
+        df_tabela["Marketplace"] = df_tabela["Marketplace"].apply(
+            lambda x: f":material/storefront: {x}"
+        )
+
+    if filtro_mkt_ativo and "Tipo de Pedido" in df_tabela.columns:
+        df_tabela["Tipo de Pedido"] = df_tabela["Tipo de Pedido"].apply(
+            lambda x: f":material/receipt_long: {x}"
+        )
+
+    return df_tabela
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -2180,69 +2316,152 @@ try:
                 df_f.groupby(["Grupo de Marketplace", "Tipo pedido"], as_index=False)
                 .agg(Receita=("Receita_Num", "sum"))
             )
+
             df_mkt["Receita_Total_Marketplace"] = df_mkt.groupby("Grupo de Marketplace")["Receita"].transform("sum")
-            df_mkt = df_mkt.sort_values(by=["Receita_Total_Marketplace", "Receita"], ascending=[False, False])
+
+            df_mkt = df_mkt.sort_values(
+                by=["Receita_Total_Marketplace", "Receita"],
+                ascending=[False, False]
+            )
 
             ordem_marketplace = (
-                df_mkt[["Grupo de Marketplace","Receita_Total_Marketplace"]]
-                .drop_duplicates().sort_values("Receita_Total_Marketplace", ascending=False)
-                ["Grupo de Marketplace"].tolist()
+                df_mkt[["Grupo de Marketplace", "Receita_Total_Marketplace"]]
+                .drop_duplicates()
+                .sort_values("Receita_Total_Marketplace", ascending=False)
+                ["Grupo de Marketplace"]
+                .tolist()
             )
+
             ordem_tipo_pedido = (
-                df_mkt.groupby("Tipo pedido", as_index=False).agg(Receita_Total_Tipo=("Receita","sum"))
-                .sort_values("Receita_Total_Tipo", ascending=False)["Tipo pedido"].tolist()
+                df_mkt.groupby("Tipo pedido", as_index=False)
+                .agg(Receita_Total_Tipo=("Receita", "sum"))
+                .sort_values("Receita_Total_Tipo", ascending=False)
+                ["Tipo pedido"]
+                .tolist()
             )
-            df_mkt["Ordem_Tipo_Pedido"] = df_mkt.groupby("Grupo de Marketplace")["Receita"].rank(method="first", ascending=False)
+
+            df_mkt["Ordem_Tipo_Pedido"] = df_mkt.groupby("Grupo de Marketplace")["Receita"].rank(
+                method="first",
+                ascending=False
+            )
 
             chart_bar = (
                 alt.Chart(df_mkt).mark_bar()
                 .encode(
-                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort=ordem_marketplace),
-                    x=alt.X("Receita:Q", title="R$", stack="zero"),
-                    color=alt.Color("Tipo pedido:N", title="Tipo de Pedido", scale=alt.Scale(domain=ordem_tipo_pedido)),
-                    order=alt.Order("Ordem_Tipo_Pedido:Q", sort="ascending"),
+                    y=alt.Y(
+                        "Grupo de Marketplace:N",
+                        title="Marketplace",
+                        sort=ordem_marketplace
+                    ),
+                    x=alt.X(
+                        "Receita:Q",
+                        title="R$",
+                        stack="zero"
+                    ),
+                    color=alt.Color(
+                        "Tipo pedido:N",
+                        title="Tipo de Pedido",
+                        scale=alt.Scale(domain=ordem_tipo_pedido)
+                    ),
+                    order=alt.Order(
+                        "Ordem_Tipo_Pedido:Q",
+                        sort="ascending"
+                    ),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                        alt.Tooltip("Tipo pedido:N",          title="Tipo de Pedido"),
-                        alt.Tooltip("Receita:Q",              title="R$",        format=",.2f"),
+                        alt.Tooltip("Tipo pedido:N", title="Tipo de Pedido"),
+                        alt.Tooltip("Receita:Q", title="R$", format=",.2f"),
                         alt.Tooltip("Receita_Total_Marketplace:Q", title="Total MKT", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
             )
+
         else:
             df_mkt = (
                 df_f.groupby("Grupo de Marketplace", as_index=False)
-                .agg(Receita=("Receita_Num","sum"))
+                .agg(Receita=("Receita_Num", "sum"))
                 .sort_values("Receita", ascending=False)
             )
+
             ordem_marketplace = df_mkt["Grupo de Marketplace"].tolist()
+
             chart_bar = (
                 alt.Chart(df_mkt).mark_bar()
                 .encode(
-                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort=ordem_marketplace),
-                    x=alt.X("Receita:Q", title="R$"),
+                    y=alt.Y(
+                        "Grupo de Marketplace:N",
+                        title="Marketplace",
+                        sort=ordem_marketplace
+                    ),
+                    x=alt.X(
+                        "Receita:Q",
+                        title="R$"
+                    ),
                     color=alt.Color(
-                        "Grupo de Marketplace:N", title="Marketplace",
-                        scale=alt.Scale(domain=MARKETPLACE_ORDEM_CORES, range=MARKETPLACE_CORES),
-                        legend=alt.Legend(orient="top", direction="horizontal"),
+                        "Grupo de Marketplace:N",
+                        title="Marketplace",
+                        scale=alt.Scale(
+                            domain=MARKETPLACE_ORDEM_CORES,
+                            range=MARKETPLACE_CORES
+                        ),
+                        legend=alt.Legend(
+                            orient="top",
+                            direction="horizontal"
+                        ),
                     ),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                        alt.Tooltip("Receita:Q",              title="R$", format=",.2f"),
+                        alt.Tooltip("Receita:Q", title="R$", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
             )
 
-        st.altair_chart(chart_bar, use_container_width=True)
+        aba_grafico_mkt, aba_detalhamento_mkt = st.tabs(
+            ["Gráfico", "Detalhamento"]
+        )
 
-        if incluir_devolucao:
-            st.caption("Exibindo apenas pedidos de devolução.")
-        elif filtro_mkt_ativo:
-            st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
-        else:
-            st.caption("Total por grupo de marketplace. Selecione marketplaces para detalhar por tipo de pedido.")
+        with aba_grafico_mkt:
+            st.altair_chart(
+                chart_bar,
+                use_container_width=True
+            )
+
+            if incluir_devolucao:
+                st.caption("Exibindo apenas pedidos de devolução.")
+            elif filtro_mkt_ativo:
+                st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
+            else:
+                st.caption("Total por grupo de marketplace. Selecione marketplaces para detalhar por tipo de pedido.")
+
+        with aba_detalhamento_mkt:
+            df_resumo_mkt_tipo = montar_resumo_marketplace_tipo_pedido(
+                df_f,
+                filtro_mkt_ativo=filtro_mkt_ativo
+            )
+
+            df_resumo_mkt_tipo_tabela = preparar_tabela_resumo_marketplace_tipo_pedido(
+                df_resumo_mkt_tipo,
+                filtro_mkt_ativo=filtro_mkt_ativo
+            )
+
+            if df_resumo_mkt_tipo_tabela.empty:
+                st.info("Sem dados para montar o detalhamento.")
+            else:
+                if incluir_devolucao:
+                    st.caption("Detalhamento consolidado dos pedidos de devolução por marketplace.")
+                elif filtro_mkt_ativo:
+                    st.caption("Detalhamento por marketplace e tipo de pedido, seguindo a mesma abertura do gráfico.")
+                else:
+                    st.caption("Detalhamento consolidado por marketplace. Selecione um marketplace para abrir por tipo de pedido.")
+
+                st.table(
+                    df_resumo_mkt_tipo_tabela,
+                    border="horizontal",
+                    hide_index=True
+                )
+
     else:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
