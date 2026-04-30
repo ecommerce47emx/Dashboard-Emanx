@@ -1450,8 +1450,8 @@ def carregar_e_tratar_dados(_conn, url_planilha):
     return df_base
 
 def montar_resumo_periodos_grafico(
-    df_base,
-    coluna_data,
+    df_atual,
+    df_anterior,
     data_ini,
     data_fim,
     ini_ant,
@@ -1506,26 +1506,8 @@ def montar_resumo_periodos_grafico(
         except Exception:
             return "0,0%"
 
-    base_valida = df_base[
-        df_base[coluna_data].notna()
-    ].copy()
-
-    base_atual = filtrar_intervalo(
-        base_valida,
-        coluna_data,
-        data_ini,
-        data_fim
-    )
-
-    base_anterior = filtrar_intervalo(
-        base_valida,
-        coluna_data,
-        ini_ant,
-        fim_ant
-    )
-
-    atual = calcular_numeros(base_atual)
-    anterior = calcular_numeros(base_anterior)
+    atual = calcular_numeros(df_atual)
+    anterior = calcular_numeros(df_anterior)
 
     df_resumo = pd.DataFrame([
         {
@@ -2354,12 +2336,12 @@ try:
         )
         
         df_resumo_periodos = montar_resumo_periodos_grafico(
-            df_base=df_grafico_base,
-            coluna_data="Dia_Grafico",
+            df_atual=df_f,
+            df_anterior=df_prev,
             data_ini=data_ini,
             data_fim=data_fim,
-            ini_ant=ini_ant_chart,
-            fim_ant=fim_ant_chart,
+            ini_ant=ini_ant,
+            fim_ant=fim_ant,
         )
         
         df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(
