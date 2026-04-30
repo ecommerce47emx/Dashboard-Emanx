@@ -1179,23 +1179,55 @@ def montar_df_lotes_complementar(df_base, data_ini, data_fim):
 def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
     ordem_series = ["Receita Novos", "Receita Lotes"]
 
+    cor_novos = "#4aa065"
+    cor_lotes = "#94a3b8"
+
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+
     df_plot = df_plot.copy()
+
     df_plot["Serie"] = pd.Categorical(
         df_plot["Serie"],
         categories=ordem_series,
         ordered=True
     )
+
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
     dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
+    df_plot["Baseline_Y"] = dominio_y[0]
 
-    return (
+    qtd_dias = df_plot["Posicao_Label"].nunique()
+    angulo_x = -35 if qtd_dias > 22 else 0
+
+    escala_cores_linha = alt.Scale(
+        domain=ordem_series,
+        range=[cor_novos, cor_lotes]
+    )
+
+    legenda_series = alt.Legend(
+        orient="top",
+        direction="horizontal",
+        title="Série"
+    )
+
+    base = (
         alt.Chart(df_plot)
-        .mark_line(point=True, strokeWidth=3)
         .encode(
             x=alt.X(
                 "Posicao_Label:O",
-                title="Dia dentro do período"
+                title="Dia dentro do período",
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    labelAngle=angulo_x,
+                    labelPadding=10,
+                    titlePadding=18,
+                    labelOverlap=True,
+                )
             ),
             y=alt.Y(
                 "Valor:Q",
@@ -1204,22 +1236,17 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
                     domain=dominio_y,
                     zero=False,
                     nice=False
-                )
-            ),
-            color=alt.Color(
-                "Serie:N",
-                title="Série",
-                scale=alt.Scale(
-                    domain=ordem_series,
-                    range=["#4aa065", "#94a3b8"]
                 ),
-                legend=alt.Legend(
-                    orient="top",
-                    direction="horizontal"
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    gridColor="rgba(148,163,184,0.18)",
+                    labelPadding=8,
+                    titlePadding=12,
                 )
             ),
-            order=alt.Order("Ordem_Serie:Q", sort="ascending"),
-            detail="Serie:N",
             tooltip=[
                 alt.Tooltip("Serie:N", title="Série"),
                 alt.Tooltip("Posicao_Dia:Q", title="Posição"),
@@ -1227,7 +1254,126 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
                 alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
             ],
         )
-        .properties(height=380)
+    )
+
+    area_lotes = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Lotes")
+        .mark_area(
+            color=cor_lotes,
+            opacity=0.14,
+            interpolate="monotone"
+        )
+        .encode(
+            y2=alt.Y2("Baseline_Y:Q")
+        )
+    )
+
+    area_novos = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Novos")
+        .mark_area(
+            color=cor_novos,
+            opacity=0.14,
+            interpolate="monotone"
+        )
+        .encode(
+            y2=alt.Y2("Baseline_Y:Q")
+        )
+    )
+
+    linha_lotes = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Lotes")
+        .mark_line(
+            strokeWidth=2.6,
+            interpolate="monotone"
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    pontos_lotes = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Lotes")
+        .mark_circle(
+            size=42,
+            opacity=0.95,
+            stroke="white",
+            strokeWidth=1
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    linha_novos = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Novos")
+        .mark_line(
+            strokeWidth=3.3,
+            interpolate="monotone"
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    pontos_novos = (
+        base
+        .transform_filter(alt.datum.Serie == "Receita Novos")
+        .mark_circle(
+            size=52,
+            opacity=0.95,
+            stroke="white",
+            strokeWidth=1
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    return (
+        alt.layer(
+            area_lotes,
+            area_novos,
+            linha_lotes,
+            pontos_lotes,
+            linha_novos,
+            pontos_novos,
+        )
+        .resolve_scale(
+            color="shared"
+        )
+        .properties(
+            height=380,
+            padding={
+                "top": 8,
+                "right": 12,
+                "bottom": 30,
+                "left": 8,
+            }
+        )
+        .configure_view(
+            strokeWidth=0
+        )
     )
 
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
