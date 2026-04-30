@@ -2116,6 +2116,9 @@ try:
             width: 100%;
             overflow-x: auto;
             margin-bottom: 10px;
+            border: 1px solid rgba(128,128,128,0.18);
+            border-radius: 12px;
+            background: transparent;
         }
         
         .resumo-periodos-table {
@@ -2143,25 +2146,39 @@ try:
             color: inherit;
         }
         
+        /* Divisórias internas entre colunas, sem borda externa lateral */
         .resumo-periodos-table th:not(:last-child),
         .resumo-periodos-table td:not(:last-child) {
             border-right: 1px solid rgba(128,128,128,0.08);
         }
         
+        /* Remove linha inferior externa das células da última linha */
         .resumo-periodos-table tbody tr:last-child td {
             border-bottom: none;
         }
         
+        /* Respiro na primeira coluna */
         .resumo-periodos-table th:first-child,
         .resumo-periodos-table td:first-child {
-            padding-left: 0;
+            padding-left: 14px;
         }
         
+        /* Respiro na última coluna */
         .resumo-periodos-table th:last-child,
         .resumo-periodos-table td:last-child {
-            padding-right: 0;
+            padding-right: 14px;
         }
         
+        /* Arredondamento visual do cabeçalho */
+        .resumo-periodos-table thead th:first-child {
+            border-top-left-radius: 12px;
+        }
+        
+        .resumo-periodos-table thead th:last-child {
+            border-top-right-radius: 12px;
+        }
+        
+        /* Cores apenas na linha de variação */
         .resumo-var-up {
             background: rgba(34,197,94,0.16);
             color: #15803d !important;
