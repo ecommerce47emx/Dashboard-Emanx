@@ -67,21 +67,18 @@ def calcular_margem_pct(liquido, custo):
     try:
         liquido = float(liquido or 0)
         custo = float(custo or 0)
-
         if liquido == 0:
             return 0.0
-
         return 1 - (custo / liquido)
     except Exception:
         return 0.0
+
 def calcular_taxa_devolucao_pct(qtd_devolvida, qtd_vendida_60d):
     try:
         qtd_devolvida = float(qtd_devolvida or 0)
         qtd_vendida_60d = float(qtd_vendida_60d or 0)
-
         if qtd_vendida_60d <= 0:
             return 0.0
-
         return qtd_devolvida / qtd_vendida_60d
     except Exception:
         return 0.0
@@ -134,13 +131,12 @@ def filtrar_base_vendas_60d(
     )
 
     return df_vendas_60d
+
 def filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa):
     if not somente_margem_negativa:
         return df_rank
-
     if df_rank.empty or "Margem_Pct" not in df_rank.columns:
         return df_rank.iloc[0:0].copy()
-
     return df_rank[df_rank["Margem_Pct"] < 0].copy()
 
 def montar_ranking_produto(df_atual, df_anterior, df_vendas_60d=None, incluir_devolucao=False):
@@ -231,7 +227,7 @@ def montar_ranking_produto(df_atual, df_anterior, df_vendas_60d=None, incluir_de
     df_rank["Quantidade_Anterior"] = df_rank["Quantidade_Anterior"].fillna(0)
 
     return df_rank
-    
+
 def montar_ranking_grupo(df_atual, df_anterior, campo_grupo, metrica_ordenacao, df_vendas_60d=None, incluir_devolucao=False):
     if campo_grupo not in df_atual.columns or df_atual.empty:
         return pd.DataFrame()
@@ -403,7 +399,7 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n, incluir_devolucao=
         ])
 
         st.markdown(card_html, unsafe_allow_html=True)
-        
+
 def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir_devolucao=False):
     if df_rank.empty:
         st.info("Sem dados para montar este ranking.")
@@ -477,47 +473,26 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir
         st.markdown(card_html, unsafe_allow_html=True)
 
 def limpar_moeda(valor):
-    """
-    Converte moeda BRL para float, incluindo casos de devolução:
-    - R$ -123,45
-    - -R$ 123,45
-    - (123,45)
-    - 123,45-
-    - espaços extras
-    """
     if pd.isna(valor):
         return 0.0
-
     s = str(valor).strip()
-
     if s == "":
         return 0.0
-
     negativo = False
-
     if "(" in s and ")" in s:
         negativo = True
-
     s = s.replace("R$", "").replace("r$", "").strip()
-
     if s.startswith("-"):
         negativo = True
     if s.endswith("-"):
         negativo = True
-
     s = s.replace("(", "").replace(")", "")
     s = s.replace("-", "")
     s = s.replace(" ", "")
-
-    # remove separador de milhar e normaliza decimal
     s = s.replace(".", "").replace(",", ".")
-
-    # mantém apenas dígitos e ponto
     s = re.sub(r"[^0-9.]", "", s)
-
     if s == "":
         return 0.0
-
     try:
         numero = float(s)
         return -numero if negativo else numero
@@ -544,35 +519,19 @@ def truncar_texto(texto, limite=65):
     return texto if len(texto) <= limite else texto[:limite].rstrip() + "..."
 
 def parse_data_serie(series: pd.Series) -> pd.Series:
-    """
-    Parse estrito para datas.
-    Prioriza formato brasileiro.
-    Também suporta ISO e serial do Excel.
-    """
     if series is None:
         return pd.Series(dtype="datetime64[ns]")
-
     s = series.copy()
-
     if pd.api.types.is_datetime64_any_dtype(s):
         return pd.to_datetime(s, errors="coerce").dt.normalize()
-
     raw = s.astype("string").str.strip()
     parsed = pd.Series(pd.NaT, index=series.index, dtype="datetime64[ns]")
-
     invalidas = raw.isna() | (raw == "") | (raw.str.lower() == "nan")
-
     faltando = ~invalidas
-
     formatos_br = [
-        "%d/%m/%Y",
-        "%d/%m/%Y %H:%M:%S",
-        "%d/%m/%Y %H:%M",
-        "%d-%m-%Y",
-        "%d-%m-%Y %H:%M:%S",
-        "%d-%m-%Y %H:%M",
+        "%d/%m/%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M",
+        "%d-%m-%Y", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M",
     ]
-
     for fmt in formatos_br:
         if not faltando.any():
             break
@@ -581,16 +540,10 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
         faltando = parsed.isna() & (~invalidas)
-
     formatos_iso = [
-        "%Y-%m-%d",
-        "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%d %H:%M",
-        "%Y/%m/%d",
-        "%Y/%m/%d %H:%M:%S",
-        "%Y/%m/%d %H:%M",
+        "%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        "%Y/%m/%d", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M",
     ]
-
     for fmt in formatos_iso:
         if not faltando.any():
             break
@@ -599,7 +552,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
         faltando = parsed.isna() & (~invalidas)
-
     if faltando.any():
         raw_limpo = (
             raw[faltando]
@@ -611,7 +563,6 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         ok = tentativa.notna()
         if ok.any():
             parsed.loc[tentativa[ok].index] = tentativa[ok]
-
     faltando = parsed.isna() & (~invalidas)
     if faltando.any():
         numericos = pd.to_numeric(
@@ -621,18 +572,14 @@ def parse_data_serie(series: pd.Series) -> pd.Series:
         ok = numericos.notna()
         if ok.any():
             datas_excel = pd.to_datetime(
-                numericos[ok],
-                unit="D",
-                origin="1899-12-30",
-                errors="coerce"
+                numericos[ok], unit="D", origin="1899-12-30", errors="coerce"
             )
             parsed.loc[datas_excel.index] = datas_excel
-
     return pd.to_datetime(parsed, errors="coerce").dt.normalize()
 
 def ao_mudar_periodo_manual():
     st.session_state["periodo_rapido"] = "Personalizado"
-    
+
 def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
     if coluna not in df.columns:
         return pd.Series(pd.NaT, index=df.index)
@@ -642,21 +589,16 @@ def parse_data_coluna(df: pd.DataFrame, coluna: str) -> pd.Series:
 def normalizar_codigo(valor, tamanho_min=6):
     if pd.isna(valor):
         return ""
-
     txt = str(valor).strip()
-
     if txt.endswith(".0"):
         txt = txt[:-2]
-
     num = pd.to_numeric(txt, errors="coerce")
     if pd.notna(num):
         txt = str(int(num))
     else:
         txt = re.sub(r"\D", "", txt)
-
     if not txt:
         return ""
-
     return txt.zfill(tamanho_min)
 
 def normalizar_sku(valor):
@@ -670,37 +612,28 @@ def normalizar_sku(valor):
 def normalizar_filial(valor):
     if pd.isna(valor):
         return ""
-
     txt = str(valor).strip()
-
     if txt.endswith(".0"):
         txt = txt[:-2]
-
     num = pd.to_numeric(txt, errors="coerce")
     if pd.notna(num):
         txt = str(int(num))
     else:
         txt = re.sub(r"\D", "", txt)
-
     if not txt:
         return ""
-
     return txt.zfill(5)
 
 def extrair_cor3(valor):
     if pd.isna(valor):
         return ""
-
     txt = str(valor).strip().upper()
-
     m = re.match(r"^\s*(\d{1,3})", txt)
     if m:
         return m.group(1).zfill(3)
-
     digitos = re.sub(r"\D", "", txt)
     if digitos:
         return digitos[:3].zfill(3)
-
     return ""
 
 
@@ -708,12 +641,10 @@ def build_img_url(row):
     try:
         codigo = normalizar_codigo(row.get("Código", ""))
         cor3 = extrair_cor3(row.get("Cor", ""))
-
         if codigo and cor3:
             return f"{BASE_IMG_URL}{codigo}{cor3}1.jpg"
     except Exception:
         pass
-
     return ""
 
 
@@ -727,21 +658,17 @@ def primeiro_valor_nao_vazio(series):
 def obter_delta_info(atual, anterior):
     atual = float(atual or 0)
     anterior = float(anterior or 0)
-
     if anterior == 0:
         if atual == 0:
             return "0,0%", "neutral"
         return "Novo", "up"
-
     delta = ((atual - anterior) / abs(anterior)) * 100
-
     if delta > 0:
         classe = "up"
     elif delta < 0:
         classe = "down"
     else:
         classe = "neutral"
-
     return f"{delta:+.1f}%".replace(".", ","), classe
 
 
@@ -753,9 +680,7 @@ def calcular_delta_pontos_percentuais(atual, anterior):
     try:
         atual = float(atual or 0)
         anterior = float(anterior or 0)
-
         delta_pct = (atual - anterior) * 100
-
         if delta_pct > 0:
             return f"+{delta_pct:.1f}%".replace(".", ",")
         elif delta_pct < 0:
@@ -767,41 +692,31 @@ def calcular_delta_pontos_percentuais(atual, anterior):
 
 def formatar_chip_delta(atual, anterior):
     texto, classe = obter_delta_info(atual, anterior)
-
-    mapa = {
-        "up": "#15803d",
-        "down": "#dc2626",
-        "neutral": "#475569",
-    }
-
+    mapa = {"up": "#15803d", "down": "#dc2626", "neutral": "#475569"}
     fundo = {
         "up": "rgba(34,197,94,0.12)",
         "down": "rgba(239,68,68,0.12)",
         "neutral": "rgba(100,116,139,0.12)",
     }
-
     return (
         f'<span class="ranking-chip" '
         f'style="color:{mapa[classe]}; background:{fundo[classe]};">'
         f'Variação: {texto}'
         f'</span>'
     )
-    
+
 def formatar_chip_margem(margem):
     try:
         margem = float(margem or 0)
     except Exception:
         margem = 0.0
-
     texto = formatar_pct(margem)
-
     if margem > 0:
         cor = "#15803d"
         fundo = "rgba(34,197,94,0.12)"
     else:
         cor = "#dc2626"
         fundo = "rgba(239,68,68,0.12)"
-
     return (
         f'<span class="ranking-chip" '
         f'style="color:{cor}; background:{fundo};">'
@@ -816,7 +731,6 @@ def formatar_chip_taxa_devolucao(taxa_devolucao, qtd_vendida_60d):
     except Exception:
         taxa_devolucao = 0.0
         qtd_vendida_60d = 0.0
-
     if qtd_vendida_60d <= 0:
         return (
             f'<span class="ranking-chip" '
@@ -824,16 +738,13 @@ def formatar_chip_taxa_devolucao(taxa_devolucao, qtd_vendida_60d):
             f'Devolução: N/D'
             f'</span>'
         )
-
     texto = formatar_pct(taxa_devolucao)
-
     if taxa_devolucao > 0:
         cor = "#dc2626"
         fundo = "rgba(239,68,68,0.12)"
     else:
         cor = "#475569"
         fundo = "rgba(100,116,139,0.12)"
-
     return (
         f'<span class="ranking-chip" '
         f'style="color:{cor}; background:{fundo};">'
@@ -844,61 +755,38 @@ def formatar_chip_taxa_devolucao(taxa_devolucao, qtd_vendida_60d):
 def periodo_anterior(data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
-
     dias_periodo = (data_fim - data_ini).days + 1
-
-    # Para atalhos rápidos, mantém comparação por janela imediatamente anterior
     if modo_periodo in ["Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias"]:
         fim_anterior = data_ini - pd.Timedelta(days=1)
         ini_anterior = fim_anterior - pd.Timedelta(days=dias_periodo - 1)
         return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
-
-    # Para períodos dentro de um único mês, compara com os mesmos dias do mês anterior
     if data_ini.year == data_fim.year and data_ini.month == data_fim.month:
         primeiro_dia_mes_atual = data_ini.replace(day=1)
         ultimo_dia_mes_anterior = primeiro_dia_mes_atual - pd.Timedelta(days=1)
         primeiro_dia_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
-
         dia_inicio_anterior = min(data_ini.day, ultimo_dia_mes_anterior.day)
         dia_fim_anterior = min(data_fim.day, ultimo_dia_mes_anterior.day)
-
         ini_anterior = primeiro_dia_mes_anterior + pd.Timedelta(days=dia_inicio_anterior - 1)
         fim_anterior = primeiro_dia_mes_anterior + pd.Timedelta(days=dia_fim_anterior - 1)
-
         dias_comparacao = (fim_anterior - ini_anterior).days + 1
         return ini_anterior.normalize(), fim_anterior.normalize(), dias_comparacao
-
-    # Fallback para períodos personalizados maiores ou cruzando meses
     fim_anterior = data_ini - pd.Timedelta(days=1)
     ini_anterior = fim_anterior - pd.Timedelta(days=dias_periodo - 1)
-
     return ini_anterior.normalize(), fim_anterior.normalize(), dias_periodo
 
 def calcular_dominio_y_grafico(df_plot, coluna_valor="Valor"):
     if df_plot.empty or coluna_valor not in df_plot.columns:
         return [0, 1]
-
     valores = pd.to_numeric(df_plot[coluna_valor], errors="coerce").dropna()
-
-    # Ignora zeros para não achatar o gráfico quando algum dia reindexado veio sem venda
     valores_positivos = valores[valores > 0]
-
     if valores_positivos.empty:
         return [0, 1]
-
     valor_min = float(valores_positivos.min())
     valor_max = float(valores_positivos.max())
-
     if valor_min == valor_max:
         margem = valor_max * 0.10 if valor_max > 0 else 1
-        return [
-            max(0, valor_min - margem),
-            valor_max + margem
-        ]
-
+        return [max(0, valor_min - margem), valor_max + margem]
     amplitude = valor_max - valor_min
-
-    # Define um arredondamento proporcional ao tamanho dos valores
     if valor_max >= 100000:
         passo = 10000
     elif valor_max >= 50000:
@@ -909,225 +797,122 @@ def calcular_dominio_y_grafico(df_plot, coluna_valor="Valor"):
         passo = 500
     else:
         passo = 100
-
     y_min = max(0, (valor_min // passo) * passo)
     y_max = ((valor_max // passo) + 1) * passo
-
-    # Garante um respiro mínimo no topo
     if y_max <= valor_max:
         y_max = valor_max + amplitude * 0.10
-
     return [y_min, y_max]
 
+# ──────────────────────────────────────────────
+# HELPERS DE EIXO — elimina títulos verbosos no mobile
+# ──────────────────────────────────────────────
+def _eixo_x_dias(angulo=0):
+    """Eixo X padrão para séries de dias (posição relativa D01, D02…)."""
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+    return alt.Axis(
+        labelColor=cinza_eixo,
+        titleColor=cinza_eixo,
+        domainColor=cinza_grade,
+        tickColor=cinza_grade,
+        labelAngle=angulo,
+        labelPadding=8,
+        titlePadding=10,
+        labelOverlap=True,
+    )
+
+def _eixo_y_receita():
+    """Eixo Y sem título longo — economiza espaço horizontal no mobile."""
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+    return alt.Axis(
+        title=None,               # REMOVIDO: libera ~40 px no mobile
+        labelColor=cinza_eixo,
+        domainColor=cinza_grade,
+        tickColor=cinza_grade,
+        gridColor="rgba(148,163,184,0.18)",
+        labelPadding=6,
+        format="~s",              # 1k, 10k, 1M — mais curto no eixo
+    )
+
+def _eixo_x_data(angulo=0):
+    """Eixo X padrão para datas reais."""
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+    return alt.Axis(
+        format="%d/%m",
+        labelColor=cinza_eixo,
+        titleColor=cinza_eixo,
+        domainColor=cinza_grade,
+        tickColor=cinza_grade,
+        labelAngle=angulo,
+        labelPadding=8,
+        titlePadding=10,
+        labelOverlap=True,
+    )
+
+# ──────────────────────────────────────────────
+# GRÁFICO: COMPARATIVO PERÍODO ATUAL x ANTERIOR
+# ──────────────────────────────────────────────
 def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     df_plot = df_cmp.copy()
 
     ordem_series = ["Período Atual", "Período Anterior"]
-
-    cor_linha_atual = "#4aa065"
-    cor_area_atual = "#4aa065"
-
+    cor_linha_atual   = "#4aa065"
+    cor_area_atual    = "#4aa065"
     cor_linha_anterior = "#dfaf24"
-    cor_area_anterior = "#ffffe7"
+    cor_area_anterior  = "#ffffe7"
 
-    cinza_eixo = "#64748b"
-    cinza_grade = "#CBD5E1"
-
-    df_plot["Serie"] = pd.Categorical(
-        df_plot["Serie"],
-        categories=ordem_series,
-        ordered=True
-    )
-
+    df_plot["Serie"] = pd.Categorical(df_plot["Serie"], categories=ordem_series, ordered=True)
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
     dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
     df_plot["Baseline_Y"] = dominio_y[0]
 
-    qtd_dias = df_plot["Posicao_Label"].nunique()
-    angulo_x = -35 if qtd_dias > 22 else 0
+    qtd_dias  = df_plot["Posicao_Label"].nunique()
+    angulo_x  = -35 if qtd_dias > 22 else 0
 
-    escala_cores_linha = alt.Scale(
-        domain=ordem_series,
-        range=[cor_linha_atual, cor_linha_anterior]
-    )
-
-    legenda_series = alt.Legend(
-        orient="top",
-        direction="horizontal",
-        title="Série"
-    )
+    escala_cores = alt.Scale(domain=ordem_series, range=[cor_linha_atual, cor_linha_anterior])
+    legenda      = alt.Legend(orient="top", direction="horizontal", title=None)
 
     base = (
         alt.Chart(df_plot)
         .encode(
-            x=alt.X(
-                "Posicao_Label:O",
-                title="Dia dentro do período",
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    labelAngle=angulo_x,
-                    labelPadding=10,
-                    titlePadding=18,
-                    labelOverlap=True,
-                )
-            ),
+            x=alt.X("Posicao_Label:O", title=None, axis=_eixo_x_dias(angulo_x)),
             y=alt.Y(
                 "Valor:Q",
-                title="Receita (R$)",
-                scale=alt.Scale(
-                    domain=dominio_y,
-                    zero=False,
-                    nice=False
-                ),
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    gridColor="rgba(148,163,184,0.18)",
-                    labelPadding=8,
-                    titlePadding=12,
-                )
+                scale=alt.Scale(domain=dominio_y, zero=False, nice=False),
+                axis=_eixo_y_receita(),
             ),
             tooltip=[
-                alt.Tooltip("Serie:N", title="Série"),
-                alt.Tooltip("Posicao_Dia:Q", title="Posição"),
-                alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
-                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+                alt.Tooltip("Serie:N",          title="Série"),
+                alt.Tooltip("Posicao_Dia:Q",    title="Posição"),
+                alt.Tooltip("Data_Original:T",  title="Data",    format="%d/%m/%Y"),
+                alt.Tooltip("Valor:Q",          title="R$",      format=",.2f"),
             ],
         )
     )
 
-    area_anterior = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Anterior")
-        .mark_area(
-            color=cor_area_anterior,
-            opacity=0.14,
-            interpolate="monotone"
-        )
-        .encode(
-            y2=alt.Y2("Baseline_Y:Q")
-        )
-    )
-
-    area_atual = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Atual")
-        .mark_area(
-            color=cor_area_atual,
-            opacity=0.14,
-            interpolate="monotone"
-        )
-        .encode(
-            y2=alt.Y2("Baseline_Y:Q")
-        )
-    )
-
-    linha_anterior = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Anterior")
-        .mark_line(
-            strokeWidth=2.6,
-            interpolate="monotone"
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    pontos_anterior = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Anterior")
-        .mark_circle(
-            size=42,
-            opacity=0.95,
-            stroke="white",
-            strokeWidth=1
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    linha_atual = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Atual")
-        .mark_line(
-            strokeWidth=3.3,
-            interpolate="monotone"
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    pontos_atual = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Atual")
-        .mark_circle(
-            size=52,
-            opacity=0.95,
-            stroke="white",
-            strokeWidth=1
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
+    area_ant  = base.transform_filter(alt.datum.Serie == "Período Anterior").mark_area(color=cor_area_anterior, opacity=0.14, interpolate="monotone").encode(y2=alt.Y2("Baseline_Y:Q"))
+    area_at   = base.transform_filter(alt.datum.Serie == "Período Atual").mark_area(color=cor_area_atual, opacity=0.14, interpolate="monotone").encode(y2=alt.Y2("Baseline_Y:Q"))
+    linha_ant = base.transform_filter(alt.datum.Serie == "Período Anterior").mark_line(strokeWidth=2.6, interpolate="monotone").encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    pts_ant   = base.transform_filter(alt.datum.Serie == "Período Anterior").mark_circle(size=42, opacity=0.95, stroke="white", strokeWidth=1).encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    linha_at  = base.transform_filter(alt.datum.Serie == "Período Atual").mark_line(strokeWidth=3.3, interpolate="monotone").encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    pts_at    = base.transform_filter(alt.datum.Serie == "Período Atual").mark_circle(size=52, opacity=0.95, stroke="white", strokeWidth=1).encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
 
     return (
-        alt.layer(
-            area_anterior,
-            area_atual,
-            linha_anterior,
-            pontos_anterior,
-            linha_atual,
-            pontos_atual,
-        )
-        .resolve_scale(
-            color="shared"
-        )
-        .properties(
-            height=380,
-            padding={
-                "top": 8,
-                "right": 12,
-                "bottom": 30,
-                "left": 8,
-            }
-        )
-        .configure_view(
-            strokeWidth=0
-        )
+        alt.layer(area_ant, area_at, linha_ant, pts_ant, linha_at, pts_at)
+        .resolve_scale(color="shared")
+        .properties(height=340, padding={"top": 8, "right": 8, "bottom": 24, "left": 4})
+        .configure_view(strokeWidth=0)
     )
+
+# ──────────────────────────────────────────────
+# GRÁFICO: LOTES X NOVOS
+# ──────────────────────────────────────────────
 def montar_df_lotes_complementar(df_base, data_ini, data_fim):
-    base_valida = df_base[
-        df_base["Dia_Grafico"].notna()
-    ].copy()
-
+    base_valida  = df_base[df_base["Dia_Grafico"].notna()].copy()
     base_periodo = filtrar_intervalo(base_valida, "Dia_Grafico", data_ini, data_fim)
-
     if base_periodo.empty:
         return pd.DataFrame()
 
@@ -1145,9 +930,7 @@ def montar_df_lotes_complementar(df_base, data_ini, data_fim):
 
     if "Fornecedor" in base_periodo.columns:
         lotes_dia = (
-            base_periodo[
-                base_periodo["Fornecedor"].apply(normalizar_texto) == "LOTES"
-            ]
+            base_periodo[base_periodo["Fornecedor"].apply(normalizar_texto) == "LOTES"]
             .groupby("Dia_Grafico", as_index=True)["Receita_Num"]
             .sum()
             .reindex(datas_periodo, fill_value=0)
@@ -1157,42 +940,22 @@ def montar_df_lotes_complementar(df_base, data_ini, data_fim):
 
     complementar_dia = total_dia - lotes_dia
 
-    df_lotes = pd.DataFrame({
-        "Data_Original": datas_periodo,
-        "Valor": lotes_dia.values,
-        "Serie": "Receita Lotes"
-    })
-
-    df_comp = pd.DataFrame({
-        "Data_Original": datas_periodo,
-        "Valor": complementar_dia.values,
-        "Serie": "Receita Novos"
-    })
+    df_lotes = pd.DataFrame({"Data_Original": datas_periodo, "Valor": lotes_dia.values,        "Serie": "Receita Lotes"})
+    df_comp  = pd.DataFrame({"Data_Original": datas_periodo, "Valor": complementar_dia.values, "Serie": "Receita Novos"})
 
     df_plot = pd.concat([df_lotes, df_comp], ignore_index=True)
-    df_plot["Posicao_Dia"] = df_plot.groupby("Serie").cumcount() + 1
+    df_plot["Posicao_Dia"]   = df_plot.groupby("Serie").cumcount() + 1
     df_plot["Posicao_Label"] = df_plot["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
-
     return df_plot
 
 
 def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
     ordem_series = ["Receita Novos", "Receita Lotes"]
-
     cor_novos = "#4aa065"
     cor_lotes = "#94a3b8"
 
-    cinza_eixo = "#64748b"
-    cinza_grade = "#CBD5E1"
-
     df_plot = df_plot.copy()
-
-    df_plot["Serie"] = pd.Categorical(
-        df_plot["Serie"],
-        categories=ordem_series,
-        ordered=True
-    )
-
+    df_plot["Serie"] = pd.Categorical(df_plot["Serie"], categories=ordem_series, ordered=True)
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
     dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
@@ -1201,188 +964,46 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
     qtd_dias = df_plot["Posicao_Label"].nunique()
     angulo_x = -35 if qtd_dias > 22 else 0
 
-    escala_cores_linha = alt.Scale(
-        domain=ordem_series,
-        range=[cor_novos, cor_lotes]
-    )
-
-    legenda_series = alt.Legend(
-        orient="top",
-        direction="horizontal",
-        title="Série"
-    )
+    escala_cores = alt.Scale(domain=ordem_series, range=[cor_novos, cor_lotes])
+    legenda      = alt.Legend(orient="top", direction="horizontal", title=None)
 
     base = (
         alt.Chart(df_plot)
         .encode(
-            x=alt.X(
-                "Posicao_Label:O",
-                title="Dia dentro do período",
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    labelAngle=angulo_x,
-                    labelPadding=10,
-                    titlePadding=18,
-                    labelOverlap=True,
-                )
-            ),
+            x=alt.X("Posicao_Label:O", title=None, axis=_eixo_x_dias(angulo_x)),
             y=alt.Y(
                 "Valor:Q",
-                title="Receita (R$)",
-                scale=alt.Scale(
-                    domain=dominio_y,
-                    zero=False,
-                    nice=False
-                ),
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    gridColor="rgba(148,163,184,0.18)",
-                    labelPadding=8,
-                    titlePadding=12,
-                )
+                scale=alt.Scale(domain=dominio_y, zero=False, nice=False),
+                axis=_eixo_y_receita(),
             ),
             tooltip=[
-                alt.Tooltip("Serie:N", title="Série"),
-                alt.Tooltip("Posicao_Dia:Q", title="Posição"),
+                alt.Tooltip("Serie:N",         title="Série"),
+                alt.Tooltip("Posicao_Dia:Q",   title="Posição"),
                 alt.Tooltip("Data_Original:T", title="Data", format="%d/%m/%Y"),
-                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+                alt.Tooltip("Valor:Q",         title="R$",   format=",.2f"),
             ],
         )
     )
 
-    area_lotes = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Lotes")
-        .mark_area(
-            color=cor_lotes,
-            opacity=0.14,
-            interpolate="monotone"
-        )
-        .encode(
-            y2=alt.Y2("Baseline_Y:Q")
-        )
-    )
-
-    area_novos = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Novos")
-        .mark_area(
-            color=cor_novos,
-            opacity=0.14,
-            interpolate="monotone"
-        )
-        .encode(
-            y2=alt.Y2("Baseline_Y:Q")
-        )
-    )
-
-    linha_lotes = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Lotes")
-        .mark_line(
-            strokeWidth=2.6,
-            interpolate="monotone"
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    pontos_lotes = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Lotes")
-        .mark_circle(
-            size=42,
-            opacity=0.95,
-            stroke="white",
-            strokeWidth=1
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    linha_novos = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Novos")
-        .mark_line(
-            strokeWidth=3.3,
-            interpolate="monotone"
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
-
-    pontos_novos = (
-        base
-        .transform_filter(alt.datum.Serie == "Receita Novos")
-        .mark_circle(
-            size=52,
-            opacity=0.95,
-            stroke="white",
-            strokeWidth=1
-        )
-        .encode(
-            color=alt.Color(
-                "Serie:N",
-                scale=escala_cores_linha,
-                legend=legenda_series
-            )
-        )
-    )
+    area_l  = base.transform_filter(alt.datum.Serie == "Receita Lotes").mark_area(color=cor_lotes, opacity=0.14, interpolate="monotone").encode(y2=alt.Y2("Baseline_Y:Q"))
+    area_n  = base.transform_filter(alt.datum.Serie == "Receita Novos").mark_area(color=cor_novos, opacity=0.14, interpolate="monotone").encode(y2=alt.Y2("Baseline_Y:Q"))
+    linha_l = base.transform_filter(alt.datum.Serie == "Receita Lotes").mark_line(strokeWidth=2.6, interpolate="monotone").encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    pts_l   = base.transform_filter(alt.datum.Serie == "Receita Lotes").mark_circle(size=42, opacity=0.95, stroke="white", strokeWidth=1).encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    linha_n = base.transform_filter(alt.datum.Serie == "Receita Novos").mark_line(strokeWidth=3.3, interpolate="monotone").encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
+    pts_n   = base.transform_filter(alt.datum.Serie == "Receita Novos").mark_circle(size=52, opacity=0.95, stroke="white", strokeWidth=1).encode(color=alt.Color("Serie:N", scale=escala_cores, legend=legenda))
 
     return (
-        alt.layer(
-            area_lotes,
-            area_novos,
-            linha_lotes,
-            pontos_lotes,
-            linha_novos,
-            pontos_novos,
-        )
-        .resolve_scale(
-            color="shared"
-        )
-        .properties(
-            height=380,
-            padding={
-                "top": 8,
-                "right": 12,
-                "bottom": 30,
-                "left": 8,
-            }
-        )
-        .configure_view(
-            strokeWidth=0
-        )
+        alt.layer(area_l, area_n, linha_l, pts_l, linha_n, pts_n)
+        .resolve_scale(color="shared")
+        .properties(height=340, padding={"top": 8, "right": 8, "bottom": 24, "left": 4})
+        .configure_view(strokeWidth=0)
     )
 
+# ──────────────────────────────────────────────
+# GRÁFICO: RECEITA POR MARKETPLACE POR DIA
+# ──────────────────────────────────────────────
 def montar_df_marketplace_por_dia(df_base, data_ini, data_fim):
-    colunas_necessarias = [
-        "Data_Emissao_Filtro",
-        "Grupo de Marketplace",
-        "Receita_Num",
-    ]
-
+    colunas_necessarias = ["Data_Emissao_Filtro", "Grupo de Marketplace", "Receita_Num"]
     if df_base.empty or not all(col in df_base.columns for col in colunas_necessarias):
         return pd.DataFrame(), []
 
@@ -1395,13 +1016,7 @@ def montar_df_marketplace_por_dia(df_base, data_ini, data_fim):
     if base.empty:
         return pd.DataFrame(), []
 
-    base_periodo = filtrar_intervalo(
-        base,
-        "Data_Emissao_Filtro",
-        data_ini,
-        data_fim
-    )
-
+    base_periodo = filtrar_intervalo(base, "Data_Emissao_Filtro", data_ini, data_fim)
     if base_periodo.empty:
         return pd.DataFrame(), []
 
@@ -1409,8 +1024,7 @@ def montar_df_marketplace_por_dia(df_base, data_ini, data_fim):
         base_periodo.groupby("Grupo de Marketplace", as_index=False)
         .agg(Receita_Total=("Receita_Num", "sum"))
         .sort_values("Receita_Total", ascending=False)
-        ["Grupo de Marketplace"]
-        .tolist()
+        ["Grupo de Marketplace"].tolist()
     )
 
     datas_periodo = pd.date_range(
@@ -1436,45 +1050,26 @@ def montar_df_marketplace_por_dia(df_base, data_ini, data_fim):
         .reindex(idx, fill_value=0)
         .reset_index()
     )
-
-    df_plot["Receita_Total_Marketplace"] = (
-        df_plot.groupby("Grupo de Marketplace")["Receita"]
-        .transform("sum")
-    )
-
-    df_plot["Ordem_Marketplace"] = df_plot["Grupo de Marketplace"].map(
-        {mkt: i for i, mkt in enumerate(ordem_marketplace)}
-    )
+    df_plot["Receita_Total_Marketplace"] = df_plot.groupby("Grupo de Marketplace")["Receita"].transform("sum")
+    df_plot["Ordem_Marketplace"] = df_plot["Grupo de Marketplace"].map({mkt: i for i, mkt in enumerate(ordem_marketplace)})
 
     return df_plot, ordem_marketplace
+
+
+def _escala_cores_marketplace(ordem_marketplace):
+    extras = [mkt for mkt in ordem_marketplace if mkt not in MARKETPLACE_ORDEM_CORES]
+    cores_extras = ["#0f766e","#a16207","#be123c","#4338ca","#0369a1","#7c2d12"]
+    return (
+        MARKETPLACE_ORDEM_CORES + extras,
+        MARKETPLACE_CORES + cores_extras
+    )
 
 
 def criar_grafico_marketplace_por_dia(df_plot: pd.DataFrame, ordem_marketplace):
     if df_plot.empty:
         return None
 
-    cinza_eixo = "#64748b"
-    cinza_grade = "#CBD5E1"
-
-    df_plot = df_plot.copy()
-
-    marketplaces_extras = [
-        mkt for mkt in ordem_marketplace
-        if mkt not in MARKETPLACE_ORDEM_CORES
-    ]
-
-    dominio_cores = MARKETPLACE_ORDEM_CORES + marketplaces_extras
-
-    cores_extras = [
-        "#0f766e",
-        "#a16207",
-        "#be123c",
-        "#4338ca",
-        "#0369a1",
-        "#7c2d12",
-    ]
-
-    faixa_cores = MARKETPLACE_CORES + cores_extras
+    dominio_cores, faixa_cores = _escala_cores_marketplace(ordem_marketplace)
 
     qtd_dias = df_plot["Data_Emissao_Filtro"].nunique()
     angulo_x = -35 if qtd_dias > 22 else 0
@@ -1484,187 +1079,92 @@ def criar_grafico_marketplace_por_dia(df_plot: pd.DataFrame, ordem_marketplace):
     base = (
         alt.Chart(df_plot)
         .encode(
-            x=alt.X(
-                "Data_Emissao_Filtro:T",
-                title="Dia",
-                axis=alt.Axis(
-                    format="%d/%m",
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    labelAngle=angulo_x,
-                    labelPadding=10,
-                    titlePadding=18,
-                    labelOverlap=True,
-                )
-            ),
+            x=alt.X("Data_Emissao_Filtro:T", title=None, axis=_eixo_x_data(angulo_x)),
             y=alt.Y(
                 "Receita:Q",
-                title="Receita (R$)",
-                scale=alt.Scale(
-                    domain=dominio_y,
-                    zero=False,
-                    nice=False
-                ),
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    gridColor="rgba(148,163,184,0.18)",
-                    labelPadding=8,
-                    titlePadding=12,
-                )
+                scale=alt.Scale(domain=dominio_y, zero=False, nice=False),
+                axis=_eixo_y_receita(),
             ),
             color=alt.Color(
                 "Grupo de Marketplace:N",
                 title="Marketplace",
-                scale=alt.Scale(
-                    domain=dominio_cores,
-                    range=faixa_cores
-                ),
-                legend=alt.Legend(
-                    orient="top",
-                    direction="horizontal"
-                ),
-                sort=ordem_marketplace
+                scale=alt.Scale(domain=dominio_cores, range=faixa_cores),
+                legend=alt.Legend(orient="top", direction="horizontal", title=None),
+                sort=ordem_marketplace,
             ),
             detail="Grupo de Marketplace:N",
             tooltip=[
-                alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                alt.Tooltip("Data_Emissao_Filtro:T", title="Data", format="%d/%m/%Y"),
-                alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
-                alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
+                alt.Tooltip("Grupo de Marketplace:N",       title="Marketplace"),
+                alt.Tooltip("Data_Emissao_Filtro:T",        title="Data",     format="%d/%m/%Y"),
+                alt.Tooltip("Receita:Q",                    title="R$",       format=",.2f"),
+                alt.Tooltip("Receita_Total_Marketplace:Q",  title="Total MKT",format=",.2f"),
             ],
         )
     )
 
-    linhas = (
-        base
-        .mark_line(
-            strokeWidth=2.7,
-            interpolate="monotone",
-            opacity=0.92
-        )
-    )
-
-    pontos = (
-        base
-        .mark_circle(
-            size=38,
-            opacity=0.88,
-            stroke="white",
-            strokeWidth=1
-        )
-    )
+    linhas = base.mark_line(strokeWidth=2.7, interpolate="monotone", opacity=0.92)
+    pontos = base.mark_circle(size=38, opacity=0.88, stroke="white", strokeWidth=1)
 
     return (
         alt.layer(linhas, pontos)
-        .properties(
-            height=380,
-            padding={
-                "top": 8,
-                "right": 12,
-                "bottom": 30,
-                "left": 8,
-            }
-        )
-        .configure_view(
-            strokeWidth=0
-        )
+        .properties(height=340, padding={"top": 8, "right": 8, "bottom": 24, "left": 4})
+        .configure_view(strokeWidth=0)
     )
 
+
+# ──────────────────────────────────────────────
+# GRÁFICO: FACETAS POR MARKETPLACE
+# CORREÇÃO MOBILE: columns=1, width responsivo
+# ──────────────────────────────────────────────
 def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marketplace):
+    """
+    Visão individual por marketplace.
+
+    Mudanças para mobile:
+    • columns=1  → sem overflow horizontal
+    • width="container" (Altair >= 5) → preenche o contêiner Streamlit
+    • height por faceta reduzido para 160 px
+    • eixo Y sem título (usa _eixo_y_receita)
+    • y independente por faceta (scale resolve)
+    """
     if df_plot.empty:
         return None
 
-    cinza_eixo = "#64748b"
-    cinza_grade = "#CBD5E1"
-
-    df_plot = df_plot.copy()
-
-    marketplaces_extras = [
-        mkt for mkt in ordem_marketplace
-        if mkt not in MARKETPLACE_ORDEM_CORES
-    ]
-
-    dominio_cores = MARKETPLACE_ORDEM_CORES + marketplaces_extras
-
-    cores_extras = [
-        "#0f766e",
-        "#a16207",
-        "#be123c",
-        "#4338ca",
-        "#0369a1",
-        "#7c2d12",
-    ]
-
-    faixa_cores = MARKETPLACE_CORES + cores_extras
+    dominio_cores, faixa_cores = _escala_cores_marketplace(ordem_marketplace)
 
     qtd_dias = df_plot["Data_Emissao_Filtro"].nunique()
     angulo_x = -35 if qtd_dias > 22 else 0
 
+    cinza_eixo  = "#64748b"
+    cinza_grade = "#CBD5E1"
+
     base = (
         alt.Chart(df_plot)
-        .mark_line(
-            point=True,
-            strokeWidth=2.4,
-            interpolate="monotone"
-        )
+        .mark_line(point=True, strokeWidth=2.4, interpolate="monotone")
         .encode(
-            x=alt.X(
-                "Data_Emissao_Filtro:T",
-                title="Dia",
-                axis=alt.Axis(
-                    format="%d/%m",
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    labelAngle=angulo_x,
-                    labelPadding=8,
-                    titlePadding=12,
-                    labelOverlap=True,
-                )
-            ),
+            x=alt.X("Data_Emissao_Filtro:T", title=None, axis=_eixo_x_data(angulo_x)),
             y=alt.Y(
                 "Receita:Q",
-                title="Receita (R$)",
-                scale=alt.Scale(
-                    zero=False,
-                    nice=True
-                ),
-                axis=alt.Axis(
-                    labelColor=cinza_eixo,
-                    titleColor=cinza_eixo,
-                    domainColor=cinza_grade,
-                    tickColor=cinza_grade,
-                    gridColor="rgba(148,163,184,0.18)",
-                    labelPadding=6,
-                    titlePadding=10,
-                )
+                scale=alt.Scale(zero=False, nice=True),
+                axis=_eixo_y_receita(),
             ),
             color=alt.Color(
                 "Grupo de Marketplace:N",
-                title="Marketplace",
-                scale=alt.Scale(
-                    domain=dominio_cores,
-                    range=faixa_cores
-                ),
-                legend=None
+                scale=alt.Scale(domain=dominio_cores, range=faixa_cores),
+                legend=None,
             ),
             tooltip=[
-                alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                alt.Tooltip("Data_Emissao_Filtro:T", title="Data", format="%d/%m/%Y"),
-                alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
-                alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
+                alt.Tooltip("Grupo de Marketplace:N",      title="Marketplace"),
+                alt.Tooltip("Data_Emissao_Filtro:T",       title="Data",      format="%d/%m/%Y"),
+                alt.Tooltip("Receita:Q",                   title="R$",        format=",.2f"),
+                alt.Tooltip("Receita_Total_Marketplace:Q", title="Total MKT", format=",.2f"),
             ],
         )
-        .properties(
-            width=520,
-            height=210
-        )
+        # ── CORREÇÃO PRINCIPAL ──────────────────────────
+        # width="container" faz cada faceta usar 100% da
+        # largura disponível; height menor economiza scroll.
+        .properties(width="container", height=160)
+        # ────────────────────────────────────────────────
         .facet(
             facet=alt.Facet(
                 "Grupo de Marketplace:N",
@@ -1673,106 +1173,69 @@ def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marke
                 header=alt.Header(
                     labelColor=cinza_eixo,
                     labelFontSize=13,
-                    labelFontWeight="bold"
-                )
+                    labelFontWeight="bold",
+                ),
             ),
-            columns=2
+            columns=1,   # ← ERA 2, AGORA 1: elimina overflow lateral
         )
-        .resolve_scale(
-            y="independent"
-        )
-        .configure_view(
-            strokeWidth=0
-        )
+        .resolve_scale(y="independent")
+        .configure_view(strokeWidth=0)
     )
     return base
+
 
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
         return df_base.iloc[0:0].copy()
-
     ini = pd.Timestamp(ini).normalize()
     fim = pd.Timestamp(fim).normalize()
-
-    return df_base[
-        (df_base[coluna_data] >= ini) &
-        (df_base[coluna_data] <= fim)
-    ].copy()
+    return df_base[(df_base[coluna_data] >= ini) & (df_base[coluna_data] <= fim)].copy()
 
 
 def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     if data_ini is None or data_fim is None:
         return {"status": "sem_periodo"}
-
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
-
     if data_ini.year != data_fim.year or data_ini.month != data_fim.month:
         return {"status": "multiplos_meses"}
-
-    hoje_sp = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
-    ontem_sp = hoje_sp - pd.Timedelta(days=1)
-
+    hoje_sp   = pd.Timestamp(datetime.now(ZoneInfo("America/Sao_Paulo")).date())
+    ontem_sp  = hoje_sp - pd.Timedelta(days=1)
     inicio_mes_filtro = data_ini.replace(day=1)
-    fim_mes_filtro = inicio_mes_filtro + pd.offsets.MonthEnd(1)
-    inicio_mes_atual = hoje_sp.replace(day=1)
-
+    fim_mes_filtro    = inicio_mes_filtro + pd.offsets.MonthEnd(1)
+    inicio_mes_atual  = hoje_sp.replace(day=1)
     if inicio_mes_filtro < inicio_mes_atual:
         return {"status": "finalizado"}
-
     if inicio_mes_filtro > inicio_mes_atual:
         return {"status": "futuro"}
-
     if data_ini != inicio_mes_filtro:
         return {"status": "intervalo_parcial"}
-
     if data_fim < ontem_sp:
         return {"status": "intervalo_parcial"}
-
-    dias_passados = ontem_sp.day
-    dias_mes = fim_mes_filtro.day
+    dias_passados  = ontem_sp.day
+    dias_mes       = fim_mes_filtro.day
     dias_restantes = dias_mes - dias_passados
-
     if dias_passados <= 0:
         return {"status": "sem_base"}
-
     projecao = (total_atual / dias_passados) * dias_mes
-
     return {
         "status": "em_andamento",
-        "dias_passados": dias_passados,
+        "dias_passados":  dias_passados,
         "dias_restantes": dias_restantes,
-        "dias_mes": dias_mes,
-        "projecao": projecao,
+        "dias_mes":       dias_mes,
+        "projecao":       projecao,
     }
 
 
 def aplicar_filtros_dimensionais(
-    df_base,
-    marketplaces_sel,
-    filiais_sel,
-    tipos_pedido_sel,
-    marcas_sel,
-    categorias_sel,
-    fornecedores_sel,
-    incluir_devolucao,
-    somente_fulfillment
+    df_base, marketplaces_sel, filiais_sel, tipos_pedido_sel,
+    marcas_sel, categorias_sel, fornecedores_sel,
+    incluir_devolucao, somente_fulfillment
 ):
-    """
-    Regras:
-    toggle devolução desligado: traz somente não devolução
-    toggle devolução ligado: traz somente devolução
-    marketplace vazio: equivale a todos
-    quando devolução está ligada, ignora filtro de marketplace
-    filial vazia: equivale a todas
-    tipo pedido vazio: equivale a todos
-    somente fulfillment ligado: traz Tipo pedido contendo FULL e ignora seleção manual de Tipo pedido
-    """
     if incluir_devolucao:
         df_out = df_base[df_base["Eh_Devolucao"]].copy()
     else:
         df_out = df_base[~df_base["Eh_Devolucao"]].copy()
-
         if marketplaces_sel:
             df_out = df_out[df_out["Grupo de Marketplace"].isin(marketplaces_sel)]
 
@@ -1780,20 +1243,14 @@ def aplicar_filtros_dimensionais(
         df_out = df_out[df_out["Filial_Filtro"].isin(filiais_sel)]
 
     if somente_fulfillment and "Tipo pedido" in df_out.columns:
-        df_out = df_out[
-            df_out["Tipo pedido"]
-            .apply(normalizar_texto)
-            .str.contains("FULL", na=False)
-        ]
+        df_out = df_out[df_out["Tipo pedido"].apply(normalizar_texto).str.contains("FULL", na=False)]
     elif tipos_pedido_sel and "Tipo pedido" in df_out.columns:
         df_out = df_out[df_out["Tipo pedido"].isin(tipos_pedido_sel)]
 
     if marcas_sel and "Marca" in df_out.columns:
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
-
     if categorias_sel and "Categoria" in df_out.columns:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
-
     if fornecedores_sel and "Fornecedor" in df_out.columns:
         df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
@@ -1802,128 +1259,78 @@ def aplicar_filtros_dimensionais(
 def montar_df_comparativo(df_base, coluna_data, coluna_valor, data_ini, data_fim, modo_periodo="Personalizado"):
     data_ini = pd.Timestamp(data_ini).normalize()
     data_fim = pd.Timestamp(data_fim).normalize()
-
     ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim, modo_periodo)
 
-    base_valida = df_base[df_base[coluna_data].notna()].copy()
-
-    atual_base = filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
+    base_valida   = df_base[df_base[coluna_data].notna()].copy()
+    atual_base    = filtrar_intervalo(base_valida, coluna_data, data_ini, data_fim)
     anterior_base = filtrar_intervalo(base_valida, coluna_data, ini_ant, fim_ant)
 
-    datas_atuais = pd.date_range(data_ini, data_fim, freq="D")
-    datas_anteriores = pd.date_range(ini_ant, fim_ant, freq="D")
+    datas_atuais    = pd.date_range(data_ini, data_fim, freq="D")
+    datas_anteriores = pd.date_range(ini_ant,  fim_ant,  freq="D")
 
-    atual = (
-        atual_base.groupby(coluna_data, as_index=True)[coluna_valor]
-        .sum()
-        .reindex(datas_atuais, fill_value=0)
-        .rename("Valor")
-        .reset_index()
-        .rename(columns={"index": "Data_Original"})
-    )
-    atual["Posicao_Dia"] = range(1, len(atual) + 1)
-    atual["Posicao_Label"] = atual["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
-    atual["Serie"] = "Período Atual"
+    def _agregar(base, datas, serie):
+        s = (
+            base.groupby(coluna_data, as_index=True)[coluna_valor]
+            .sum()
+            .reindex(datas, fill_value=0)
+            .rename("Valor")
+            .reset_index()
+            .rename(columns={"index": "Data_Original"})
+        )
+        s["Posicao_Dia"]   = range(1, len(s) + 1)
+        s["Posicao_Label"] = s["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
+        s["Serie"]         = serie
+        return s
 
-    anterior = (
-        anterior_base.groupby(coluna_data, as_index=True)[coluna_valor]
-        .sum()
-        .reindex(datas_anteriores, fill_value=0)
-        .rename("Valor")
-        .reset_index()
-        .rename(columns={"index": "Data_Original"})
-    )
-    anterior["Posicao_Dia"] = range(1, len(anterior) + 1)
-    anterior["Posicao_Label"] = anterior["Posicao_Dia"].apply(lambda x: f"D{x:02d}")
-    anterior["Serie"] = "Período Anterior"
+    atual    = _agregar(atual_base,    datas_atuais,    "Período Atual")
+    anterior = _agregar(anterior_base, datas_anteriores, "Período Anterior")
 
     df_cmp = pd.concat([atual, anterior], ignore_index=True)
-
     return df_cmp, ini_ant, fim_ant, dias_periodo
 
 def opcoes_unicas(df_base, coluna):
     if coluna not in df_base.columns or df_base.empty:
         return []
-
     serie = df_base[coluna].dropna()
-
-    serie = serie[
-        serie.astype(str).str.strip() != ""
-    ]
-
+    serie = serie[serie.astype(str).str.strip() != ""]
     if serie.empty:
         return []
-
-    return sorted(
-        serie.drop_duplicates().tolist(),
-        key=lambda x: str(x)
-    )
+    return sorted(serie.drop_duplicates().tolist(), key=lambda x: str(x))
 
 
 def limpar_multiselect_invalido(chave, opcoes):
     if chave not in st.session_state:
         return
-
-    opcoes_validas = set(opcoes)
-    valores_atuais = st.session_state.get(chave, [])
-
+    opcoes_validas  = set(opcoes)
+    valores_atuais  = st.session_state.get(chave, [])
     if not isinstance(valores_atuais, list):
         valores_atuais = []
-
-    st.session_state[chave] = [
-        v for v in valores_atuais
-        if v in opcoes_validas
-    ]
+    st.session_state[chave] = [v for v in valores_atuais if v in opcoes_validas]
 
 
 def multiselect_dinamico(label, options, key, placeholder):
     limpar_multiselect_invalido(key, options)
-
-    return st.sidebar.multiselect(
-        label,
-        options=options,
-        key=key,
-        placeholder=placeholder,
-    )
+    return st.sidebar.multiselect(label, options=options, key=key, placeholder=placeholder)
 
 
 def aplicar_filtros_para_opcoes(
-    df_base,
-    data_ini=None,
-    data_fim=None,
-    marketplaces_sel=None,
-    filiais_sel=None,
-    tipos_pedido_sel=None,
-    marcas_sel=None,
-    categorias_sel=None,
-    fornecedores_sel=None,
-    incluir_devolucao=False,
-    somente_fulfillment=False,
-    ignorar=None,
+    df_base, data_ini=None, data_fim=None,
+    marketplaces_sel=None, filiais_sel=None, tipos_pedido_sel=None,
+    marcas_sel=None, categorias_sel=None, fornecedores_sel=None,
+    incluir_devolucao=False, somente_fulfillment=False, ignorar=None,
 ):
     ignorar = set(ignorar or [])
-
-    marketplaces_sel = marketplaces_sel or []
-    filiais_sel = filiais_sel or []
-    tipos_pedido_sel = tipos_pedido_sel or []
-    marcas_sel = marcas_sel or []
-    categorias_sel = categorias_sel or []
-    fornecedores_sel = fornecedores_sel or []
+    marketplaces_sel  = marketplaces_sel  or []
+    filiais_sel       = filiais_sel       or []
+    tipos_pedido_sel  = tipos_pedido_sel  or []
+    marcas_sel        = marcas_sel        or []
+    categorias_sel    = categorias_sel    or []
+    fornecedores_sel  = fornecedores_sel  or []
 
     df_out = df_base.copy()
 
-    if (
-        "periodo" not in ignorar
-        and data_ini is not None
-        and data_fim is not None
-        and "Data_Emissao_Filtro" in df_out.columns
-    ):
-        df_out = filtrar_intervalo(
-            df_out,
-            "Data_Emissao_Filtro",
-            data_ini,
-            data_fim
-        )
+    if "periodo" not in ignorar and data_ini is not None and data_fim is not None and "Data_Emissao_Filtro" in df_out.columns:
+        df_out = filtrar_intervalo(df_out, "Data_Emissao_Filtro", data_ini, data_fim)
 
     if "devolucao" not in ignorar and "Eh_Devolucao" in df_out.columns:
         if incluir_devolucao:
@@ -1931,73 +1338,32 @@ def aplicar_filtros_para_opcoes(
         else:
             df_out = df_out[~df_out["Eh_Devolucao"]].copy()
 
-    if (
-        "marketplace" not in ignorar
-        and marketplaces_sel
-        and not incluir_devolucao
-        and "Grupo de Marketplace" in df_out.columns
-    ):
+    if "marketplace" not in ignorar and marketplaces_sel and not incluir_devolucao and "Grupo de Marketplace" in df_out.columns:
         df_out = df_out[df_out["Grupo de Marketplace"].isin(marketplaces_sel)]
 
-    if (
-        "filial" not in ignorar
-        and filiais_sel
-        and "Filial_Filtro" in df_out.columns
-    ):
+    if "filial" not in ignorar and filiais_sel and "Filial_Filtro" in df_out.columns:
         df_out = df_out[df_out["Filial_Filtro"].isin(filiais_sel)]
 
-    if (
-        "fulfillment" not in ignorar
-        and somente_fulfillment
-        and "Tipo pedido" in df_out.columns
-    ):
-        df_out = df_out[
-            df_out["Tipo pedido"]
-            .apply(normalizar_texto)
-            .str.contains("FULL", na=False)
-        ]
+    if "fulfillment" not in ignorar and somente_fulfillment and "Tipo pedido" in df_out.columns:
+        df_out = df_out[df_out["Tipo pedido"].apply(normalizar_texto).str.contains("FULL", na=False)]
 
-    if (
-        "tipo_pedido" not in ignorar
-        and not somente_fulfillment
-        and tipos_pedido_sel
-        and "Tipo pedido" in df_out.columns
-    ):
+    if "tipo_pedido" not in ignorar and not somente_fulfillment and tipos_pedido_sel and "Tipo pedido" in df_out.columns:
         df_out = df_out[df_out["Tipo pedido"].isin(tipos_pedido_sel)]
 
-    if (
-        "marca" not in ignorar
-        and marcas_sel
-        and "Marca" in df_out.columns
-    ):
+    if "marca" not in ignorar and marcas_sel and "Marca" in df_out.columns:
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
 
-    if (
-        "categoria" not in ignorar
-        and categorias_sel
-        and "Categoria" in df_out.columns
-    ):
+    if "categoria" not in ignorar and categorias_sel and "Categoria" in df_out.columns:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
 
-    if (
-        "fornecedor" not in ignorar
-        and fornecedores_sel
-        and "Fornecedor" in df_out.columns
-    ):
+    if "fornecedor" not in ignorar and fornecedores_sel and "Fornecedor" in df_out.columns:
         df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
     return df_out
 
-@st.cache_data(
-    ttl=1800,
-    show_spinner="Carregando e tratando dados do Google Sheets..."
-)
+@st.cache_data(ttl=1800, show_spinner="Carregando e tratando dados do Google Sheets...")
 def carregar_e_tratar_dados(_conn, url_planilha):
-    df_base = _conn.read(
-        spreadsheet=url_planilha,
-        ttl=0
-    ).copy()
-        
+    df_base = _conn.read(spreadsheet=url_planilha, ttl=0).copy()
     df_base.columns = [str(c).strip() for c in df_base.columns]
 
     if "SKU" in df_base.columns:
@@ -2009,200 +1375,92 @@ def carregar_e_tratar_dados(_conn, url_planilha):
         df_base["Filial_Filtro"] = ""
 
     for col_orig, col_num in [
-        ("Receita", "Receita_Num"),
-        ("Liquido", "Liquido_Num"),
+        ("Receita",     "Receita_Num"),
+        ("Liquido",     "Liquido_Num"),
         ("Custo medio", "Custo_Num"),
     ]:
-        df_base[col_num] = (
-            df_base[col_orig].apply(limpar_moeda)
-            if col_orig in df_base.columns
-            else 0.0
-        )
+        df_base[col_num] = df_base[col_orig].apply(limpar_moeda) if col_orig in df_base.columns else 0.0
 
-    df_base["Qtd_Num"] = pd.to_numeric(
-        df_base.get("Quantidade vendida"),
-        errors="coerce"
-    ).fillna(0)
+    df_base["Qtd_Num"] = pd.to_numeric(df_base.get("Quantidade vendida"), errors="coerce").fillna(0)
 
     df_base["Data_Emissao_Filtro"] = parse_data_coluna(df_base, "Data emissao")
-    df_base["Data_Venda_Pura"] = parse_data_coluna(df_base, "Data da Venda")
+    df_base["Data_Venda_Pura"]     = parse_data_coluna(df_base, "Data da Venda")
 
     df_base["Data_Grafico"] = df_base["Data_Venda_Pura"].where(
-        df_base["Data_Venda_Pura"].notna(),
-        df_base["Data_Emissao_Filtro"]
+        df_base["Data_Venda_Pura"].notna(), df_base["Data_Emissao_Filtro"]
     )
-
-    df_base["Dia_Grafico"] = pd.to_datetime(
-        df_base["Data_Grafico"],
-        errors="coerce"
-    ).dt.normalize()
+    df_base["Dia_Grafico"] = pd.to_datetime(df_base["Data_Grafico"], errors="coerce").dt.normalize()
 
     df_base["Eh_Devolucao"] = (
-        df_base["Grupo de Marketplace"]
-        .apply(normalizar_texto)
-        .str.contains("DEVOLUCAO", na=False)
-        if "Grupo de Marketplace" in df_base.columns
-        else False
+        df_base["Grupo de Marketplace"].apply(normalizar_texto).str.contains("DEVOLUCAO", na=False)
+        if "Grupo de Marketplace" in df_base.columns else False
     )
 
     for col_num in ["Receita_Num", "Liquido_Num", "Custo_Num", "Qtd_Num"]:
-        df_base.loc[df_base["Eh_Devolucao"], col_num] = (
-            df_base.loc[df_base["Eh_Devolucao"], col_num].abs()
-        )
+        df_base.loc[df_base["Eh_Devolucao"], col_num] = df_base.loc[df_base["Eh_Devolucao"], col_num].abs()
 
     df_base["img_url"] = df_base.apply(build_img_url, axis=1)
-
     return df_base
 
-def montar_resumo_periodos_grafico(
-    df_atual,
-    df_anterior,
-    data_ini,
-    data_fim,
-    ini_ant,
-    fim_ant
-):
+def montar_resumo_periodos_grafico(df_atual, df_anterior, data_ini, data_fim, ini_ant, fim_ant):
     def calcular_numeros(df_periodo):
-        receita = df_periodo["Receita_Num"].sum() if "Receita_Num" in df_periodo.columns else 0.0
-        liquido = df_periodo["Liquido_Num"].sum() if "Liquido_Num" in df_periodo.columns else 0.0
-        custo = df_periodo["Custo_Num"].sum() if "Custo_Num" in df_periodo.columns else 0.0
-        quantidade = df_periodo["Qtd_Num"].sum() if "Qtd_Num" in df_periodo.columns else 0.0
+        receita   = df_periodo["Receita_Num"].sum()   if "Receita_Num"   in df_periodo.columns else 0.0
+        liquido   = df_periodo["Liquido_Num"].sum()   if "Liquido_Num"   in df_periodo.columns else 0.0
+        custo     = df_periodo["Custo_Num"].sum()     if "Custo_Num"     in df_periodo.columns else 0.0
+        quantidade = df_periodo["Qtd_Num"].sum()      if "Qtd_Num"       in df_periodo.columns else 0.0
+        margem    = calcular_margem_pct(liquido, custo)
+        ticket    = receita / quantidade if quantidade > 0 else 0.0
+        return {"receita": receita, "liquido": liquido, "custo": custo, "quantidade": quantidade, "margem": margem, "ticket_medio": ticket}
 
-        margem = calcular_margem_pct(liquido, custo)
-        ticket_medio = receita / quantidade if quantidade > 0 else 0.0
+    def var(a, b):
+        a, b = float(a or 0), float(b or 0)
+        if b == 0:
+            return "0,0%" if a == 0 else "Novo"
+        v = ((a - b) / abs(b)) * 100
+        return f"{v:+.1f}%".replace(".", ",")
 
-        return {
-            "receita": receita,
-            "liquido": liquido,
-            "custo": custo,
-            "quantidade": quantidade,
-            "margem": margem,
-            "ticket_medio": ticket_medio,
-        }
+    def var_pct(a, b):
+        a, b = float(a or 0), float(b or 0)
+        d = (a - b) * 100
+        if d > 0:   return f"+{d:.1f}%".replace(".", ",")
+        if d < 0:   return f"{d:.1f}%".replace(".", ",")
+        return "0,0%"
 
-    def calcular_variacao(atual, anterior):
-        try:
-            atual = float(atual or 0)
-            anterior = float(anterior or 0)
+    at  = calcular_numeros(df_atual)
+    ant = calcular_numeros(df_anterior)
 
-            if anterior == 0:
-                if atual == 0:
-                    return "0,0%"
-                return "Novo"
-
-            variacao = ((atual - anterior) / abs(anterior)) * 100
-            return f"{variacao:+.1f}%".replace(".", ",")
-        except Exception:
-            return "0,0%"
-
-    def calcular_variacao_margem(margem_atual, margem_anterior):
-        try:
-            margem_atual = float(margem_atual or 0)
-            margem_anterior = float(margem_anterior or 0)
-
-            variacao = (margem_atual - margem_anterior) * 100
-
-            if variacao > 0:
-                return f"+{variacao:.1f}%".replace(".", ",")
-            elif variacao < 0:
-                return f"{variacao:.1f}%".replace(".", ",")
-            else:
-                return "0,0%"
-        except Exception:
-            return "0,0%"
-
-    atual = calcular_numeros(df_atual)
-    anterior = calcular_numeros(df_anterior)
-
-    df_resumo = pd.DataFrame([
-        {
-            "Período": "Período Atual",
-            "Intervalo": f"{pd.Timestamp(data_ini).strftime('%d/%m/%Y')} até {pd.Timestamp(data_fim).strftime('%d/%m/%Y')}",
-            "Receita Bruta": formatar_brl(atual["receita"]),
-            "Líquido": formatar_brl(atual["liquido"]),
-            "Custo": formatar_brl(atual["custo"]),
-            "Quantidade": formatar_int(atual["quantidade"]),
-            "Margem": formatar_pct(atual["margem"]),
-            "Ticket Médio": formatar_brl(atual["ticket_medio"]),
-        },
-        {
-            "Período": "Período Anterior",
-            "Intervalo": f"{pd.Timestamp(ini_ant).strftime('%d/%m/%Y')} até {pd.Timestamp(fim_ant).strftime('%d/%m/%Y')}",
-            "Receita Bruta": formatar_brl(anterior["receita"]),
-            "Líquido": formatar_brl(anterior["liquido"]),
-            "Custo": formatar_brl(anterior["custo"]),
-            "Quantidade": formatar_int(anterior["quantidade"]),
-            "Margem": formatar_pct(anterior["margem"]),
-            "Ticket Médio": formatar_brl(anterior["ticket_medio"]),
-        },
-        {
-            "Período": "Variação",
-            "Intervalo": "Atual x Anterior",
-            "Receita Bruta": calcular_variacao(atual["receita"], anterior["receita"]),
-            "Líquido": calcular_variacao(atual["liquido"], anterior["liquido"]),
-            "Custo": calcular_variacao(atual["custo"], anterior["custo"]),
-            "Quantidade": calcular_variacao(atual["quantidade"], anterior["quantidade"]),
-            "Margem": calcular_variacao_margem(atual["margem"], anterior["margem"]),
-            "Ticket Médio": calcular_variacao(atual["ticket_medio"], anterior["ticket_medio"]),
-        },
+    return pd.DataFrame([
+        {"Período": "Período Atual",    "Intervalo": f"{pd.Timestamp(data_ini).strftime('%d/%m/%Y')} até {pd.Timestamp(data_fim).strftime('%d/%m/%Y')}", "Receita Bruta": formatar_brl(at["receita"]),  "Líquido": formatar_brl(at["liquido"]),  "Custo": formatar_brl(at["custo"]),  "Quantidade": formatar_int(at["quantidade"]),  "Margem": formatar_pct(at["margem"]),  "Ticket Médio": formatar_brl(at["ticket_medio"])},
+        {"Período": "Período Anterior", "Intervalo": f"{pd.Timestamp(ini_ant).strftime('%d/%m/%Y')} até {pd.Timestamp(fim_ant).strftime('%d/%m/%Y')}",   "Receita Bruta": formatar_brl(ant["receita"]), "Líquido": formatar_brl(ant["liquido"]), "Custo": formatar_brl(ant["custo"]), "Quantidade": formatar_int(ant["quantidade"]), "Margem": formatar_pct(ant["margem"]), "Ticket Médio": formatar_brl(ant["ticket_medio"])},
+        {"Período": "Variação",         "Intervalo": "Atual x Anterior",                                                                                  "Receita Bruta": var(at["receita"], ant["receita"]), "Líquido": var(at["liquido"], ant["liquido"]), "Custo": var(at["custo"], ant["custo"]), "Quantidade": var(at["quantidade"], ant["quantidade"]), "Margem": var_pct(at["margem"], ant["margem"]), "Ticket Médio": var(at["ticket_medio"], ant["ticket_medio"])},
     ])
 
-    return df_resumo
-
 def preparar_tabela_resumo_periodos(df_resumo):
-    df_tabela = df_resumo.drop(
-        columns=["Intervalo"],
-        errors="ignore"
-    ).copy()
-
+    df_tabela = df_resumo.drop(columns=["Intervalo"], errors="ignore").copy()
     if df_tabela.empty or "Período" not in df_tabela.columns:
         return df_tabela
 
-    def formatar_variacao_markdown(valor):
-        texto = str(valor).strip()
+    def fmt_variacao(valor):
+        t = str(valor).strip()
+        if t == "Novo":     return f":green[▲ {t}]"
+        if t.startswith("+"): return f":green[▲ {t}]"
+        if t.startswith("-"): return f":red[▼ {t}]"
+        return f":gray[▬ {t}]"
 
-        if texto == "Novo":
-            return f":green[▲ {texto}]"
+    def fmt_periodo(valor):
+        t = str(valor).strip()
+        if t == "Período Atual":    return ":material/trending_up: **Período Atual**"
+        if t == "Período Anterior": return ":material/history: Período Anterior"
+        if t == "Variação":         return ":material/percent: Variação"
+        return t
 
-        if texto.startswith("+"):
-            return f":green[▲ {texto}]"
+    df_tabela["Período"] = df_tabela["Período"].apply(fmt_periodo)
+    mask = df_resumo["Período"].astype(str).str.strip().eq("Variação")
 
-        if texto.startswith("-"):
-            return f":red[▼ {texto}]"
-
-        return f":gray[▬ {texto}]"
-
-    def formatar_periodo_visual(valor):
-        texto = str(valor).strip()
-
-        if texto == "Período Atual":
-            return ":material/trending_up: **Período Atual**"
-
-        if texto == "Período Anterior":
-            return ":material/history: Período Anterior"
-
-        if texto == "Variação":
-            return ":material/percent: Variação"
-
-        return texto
-
-    df_tabela["Período"] = df_tabela["Período"].apply(formatar_periodo_visual)
-
-    mask_variacao = (
-        df_resumo["Período"]
-        .astype(str)
-        .str.strip()
-        .eq("Variação")
-    )
-
-    for coluna in df_tabela.columns:
-        if coluna == "Período":
+    for col in df_tabela.columns:
+        if col == "Período":
             continue
-
-        df_tabela.loc[mask_variacao, coluna] = (
-            df_tabela.loc[mask_variacao, coluna]
-            .apply(formatar_variacao_markdown)
-        )
+        df_tabela.loc[mask, col] = df_tabela.loc[mask, col].apply(fmt_variacao)
 
     return df_tabela
 
@@ -2222,50 +1480,38 @@ try:
     # 6. FILTROS LATERAIS
     # ──────────────────────────────────────────
     st.sidebar.header("Filtros")
-    
+
     if st.sidebar.button("Atualizar dados"):
         carregar_e_tratar_dados.clear()
-    
         for chave in ["periodo_datas", "periodo_rapido"]:
             if chave in st.session_state:
                 del st.session_state[chave]
-    
         st.rerun()
-    
-    # ──────────────────────────────────────────
-    # 6.1 PREPARO DO PERÍODO PARA FILTROS DINÂMICOS
-    # ──────────────────────────────────────────
+
+    # 6.1 PREPARO DO PERÍODO
     data_ini = None
     data_fim = None
     periodo_rapido = "Personalizado"
-    
+
     datas_validas = df["Data_Emissao_Filtro"].dropna()
-    
+
     if not datas_validas.empty:
         data_min = datas_validas.min().date()
         data_max = datas_validas.max().date()
-    
         data_ref = data_max
         inicio_mes_ref = pd.Timestamp(data_ref).replace(day=1).date()
-    
         default_ini = max(data_min, inicio_mes_ref)
         default_fim = data_ref
-    
         if default_ini > default_fim:
             default_ini = data_min
             default_fim = data_max
-    
+
         if "periodo_rapido" not in st.session_state:
             st.session_state["periodo_rapido"] = "Mês Atual"
-    
         if "periodo_datas" not in st.session_state:
             st.session_state["periodo_datas"] = (default_ini, default_fim)
-    
-        periodo_estado = st.session_state.get(
-            "periodo_datas",
-            (default_ini, default_fim)
-        )
-    
+
+        periodo_estado = st.session_state.get("periodo_datas", (default_ini, default_fim))
         if isinstance(periodo_estado, (list, tuple)) and len(periodo_estado) == 2:
             data_ini_opcoes = pd.Timestamp(periodo_estado[0]).normalize()
             data_fim_opcoes = pd.Timestamp(periodo_estado[1]).normalize()
@@ -2273,35 +1519,20 @@ try:
             data_ini_opcoes = pd.Timestamp(default_ini).normalize()
             data_fim_opcoes = pd.Timestamp(default_fim).normalize()
     else:
-        data_min = None
-        data_max = None
-        data_ref = None
-        data_ini_opcoes = None
-        data_fim_opcoes = None
+        data_min = data_max = data_ref = None
+        data_ini_opcoes = data_fim_opcoes = None
 
-    
-    
-    # ──────────────────────────────────────────
     # 6.2 ESTADO ATUAL DOS FILTROS
-    # ──────────────────────────────────────────
-    mkt_atual = st.session_state.get("filtro_marketplace", [])
-    filial_atual = st.session_state.get("filtro_filial", [])
-    tipo_pedido_atual = st.session_state.get("filtro_tipo_pedido", [])
-    marca_atual = st.session_state.get("filtro_marca", [])
-    categoria_atual = st.session_state.get("filtro_categoria", [])
-    fornecedor_atual = st.session_state.get("filtro_fornecedor", [])
-    
-    somente_fulfillment_atual = bool(
-        st.session_state.get("filtro_somente_fulfillment", False)
-    )
-    
-    incluir_devolucao_atual = bool(
-        st.session_state.get("filtro_somente_devolucao", False)
-    )
-    
-    # ──────────────────────────────────────────
-    # 6.3 FUNÇÃO LOCAL PARA GERAR OPÇÕES DINÂMICAS
-    # ──────────────────────────────────────────
+    mkt_atual              = st.session_state.get("filtro_marketplace",          [])
+    filial_atual           = st.session_state.get("filtro_filial",               [])
+    tipo_pedido_atual      = st.session_state.get("filtro_tipo_pedido",          [])
+    marca_atual            = st.session_state.get("filtro_marca",                [])
+    categoria_atual        = st.session_state.get("filtro_categoria",            [])
+    fornecedor_atual       = st.session_state.get("filtro_fornecedor",           [])
+    somente_fulfillment_atual = bool(st.session_state.get("filtro_somente_fulfillment", False))
+    incluir_devolucao_atual   = bool(st.session_state.get("filtro_somente_devolucao",  False))
+
+    # 6.3 BASE PARA OPÇÕES DINÂMICAS
     def base_para_opcoes(ignorar):
         return aplicar_filtros_para_opcoes(
             df_base=df,
@@ -2317,163 +1548,56 @@ try:
             somente_fulfillment=somente_fulfillment_atual,
             ignorar=ignorar,
         )
-    
-    # ──────────────────────────────────────────
+
     # 6.4 FILTROS DINÂMICOS
-    # ──────────────────────────────────────────
-    mkt_lista = opcoes_unicas(
-        base_para_opcoes(["marketplace"]),
-        "Grupo de Marketplace"
-    )
-    
-    mkt_sel = multiselect_dinamico(
-        "Marketplace",
-        options=mkt_lista,
-        key="filtro_marketplace",
-        placeholder="Todos os marketplaces",
-    )
-    
-    somente_fulfillment = st.sidebar.toggle(
-        "Somente Fulfillment",
-        value=False,
-        key="filtro_somente_fulfillment",
-    )
-    
-    incluir_devolucao = st.sidebar.toggle(
-        "Somente Devolução",
-        value=False,
-        key="filtro_somente_devolucao",
-    )
-    
-    somente_margem_negativa = st.sidebar.toggle(
-        "Somente Margem Negativa",
-        value=False,
-        key="filtro_somente_margem_negativa",
-    )
-    
-    filiais_validas_base = opcoes_unicas(
-        base_para_opcoes(["filial"]),
-        "Filial_Filtro"
-    )
-    
-    filiais_lista_base = ["00001", "00008", "00016", "20301"]
-    filiais_lista = [
-        filial for filial in filiais_lista_base
-        if filial in filiais_validas_base
-    ]
-    
-    filial_sel = multiselect_dinamico(
-        "Filial",
-        options=filiais_lista,
-        key="filtro_filial",
-        placeholder="Todas as filiais",
-    )
-    
-    tipo_pedido_lista = opcoes_unicas(
-        base_para_opcoes(["tipo_pedido"]),
-        "Tipo pedido"
-    )
-    
-    tipo_pedido_sel = multiselect_dinamico(
-        "Tipo de Pedido",
-        options=tipo_pedido_lista,
-        key="filtro_tipo_pedido",
-        placeholder="Todos os tipos de pedido",
-    )
-    
-    marca_lista = opcoes_unicas(
-        base_para_opcoes(["marca"]),
-        "Marca"
-    )
-    
-    marca_sel = multiselect_dinamico(
-        "Marca",
-        options=marca_lista,
-        key="filtro_marca",
-        placeholder="Todas as marcas",
-    )
-    
-    categoria_lista = opcoes_unicas(
-        base_para_opcoes(["categoria"]),
-        "Categoria"
-    )
-    
-    categoria_sel = multiselect_dinamico(
-        "Categoria",
-        options=categoria_lista,
-        key="filtro_categoria",
-        placeholder="Todas as categorias",
-    )
-    
-    fornecedor_lista = opcoes_unicas(
-        base_para_opcoes(["fornecedor"]),
-        "Fornecedor"
-    )
-    
-    fornecedor_sel = multiselect_dinamico(
-        "Fornecedor",
-        options=fornecedor_lista,
-        key="filtro_fornecedor",
-        placeholder="Todos os fornecedores",
-    )
-    
-    # ──────────────────────────────────────────
+    mkt_lista = opcoes_unicas(base_para_opcoes(["marketplace"]), "Grupo de Marketplace")
+    mkt_sel   = multiselect_dinamico("Marketplace", options=mkt_lista, key="filtro_marketplace", placeholder="Todos os marketplaces")
+
+    somente_fulfillment    = st.sidebar.toggle("Somente Fulfillment",     value=False, key="filtro_somente_fulfillment")
+    incluir_devolucao      = st.sidebar.toggle("Somente Devolução",       value=False, key="filtro_somente_devolucao")
+    somente_margem_negativa = st.sidebar.toggle("Somente Margem Negativa", value=False, key="filtro_somente_margem_negativa")
+
+    filiais_validas_base = opcoes_unicas(base_para_opcoes(["filial"]), "Filial_Filtro")
+    filiais_lista_base   = ["00001", "00008", "00016", "20301"]
+    filiais_lista        = [f for f in filiais_lista_base if f in filiais_validas_base]
+    filial_sel           = multiselect_dinamico("Filial", options=filiais_lista, key="filtro_filial", placeholder="Todas as filiais")
+
+    tipo_pedido_lista = opcoes_unicas(base_para_opcoes(["tipo_pedido"]), "Tipo pedido")
+    tipo_pedido_sel   = multiselect_dinamico("Tipo de Pedido", options=tipo_pedido_lista, key="filtro_tipo_pedido", placeholder="Todos os tipos de pedido")
+
+    marca_lista = opcoes_unicas(base_para_opcoes(["marca"]), "Marca")
+    marca_sel   = multiselect_dinamico("Marca", options=marca_lista, key="filtro_marca", placeholder="Todas as marcas")
+
+    categoria_lista = opcoes_unicas(base_para_opcoes(["categoria"]), "Categoria")
+    categoria_sel   = multiselect_dinamico("Categoria", options=categoria_lista, key="filtro_categoria", placeholder="Todas as categorias")
+
+    fornecedor_lista = opcoes_unicas(base_para_opcoes(["fornecedor"]), "Fornecedor")
+    fornecedor_sel   = multiselect_dinamico("Fornecedor", options=fornecedor_lista, key="filtro_fornecedor", placeholder="Todos os fornecedores")
+
     # 6.5 FILTRO DE PERÍODO
-    # ──────────────────────────────────────────
     if not datas_validas.empty:
         st.sidebar.markdown("**Período Rápido**")
-    
+
         periodo_rapido = st.sidebar.radio(
             "Selecione um atalho",
-            options=[
-                "Mês Atual",
-                "Últimos 7 dias",
-                "Últimos 15 dias",
-                "Últimos 30 dias",
-                "Personalizado",
-            ],
+            options=["Mês Atual", "Últimos 7 dias", "Últimos 15 dias", "Últimos 30 dias", "Personalizado"],
             key="periodo_rapido",
             label_visibility="collapsed",
             horizontal=False,
         )
-    
+
         if periodo_rapido == "Mês Atual":
-            periodo_value = (default_ini, default_fim)
-            st.session_state["periodo_datas"] = periodo_value
-    
+            st.session_state["periodo_datas"] = (default_ini, default_fim)
         elif periodo_rapido == "Últimos 7 dias":
-            _fim_rapido = data_ref
-            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=6)).date()
-    
-            _ini_rapido = max(_ini_rapido, data_min)
-            _fim_rapido = min(_fim_rapido, data_max)
-    
-            periodo_value = (_ini_rapido, _fim_rapido)
-            st.session_state["periodo_datas"] = periodo_value
-    
+            _i = max((pd.Timestamp(data_ref) - pd.Timedelta(days=6)).date(), data_min)
+            st.session_state["periodo_datas"] = (_i, data_ref)
         elif periodo_rapido == "Últimos 15 dias":
-            _fim_rapido = data_ref
-            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=14)).date()
-    
-            _ini_rapido = max(_ini_rapido, data_min)
-            _fim_rapido = min(_fim_rapido, data_max)
-    
-            periodo_value = (_ini_rapido, _fim_rapido)
-            st.session_state["periodo_datas"] = periodo_value
-    
+            _i = max((pd.Timestamp(data_ref) - pd.Timedelta(days=14)).date(), data_min)
+            st.session_state["periodo_datas"] = (_i, data_ref)
         elif periodo_rapido == "Últimos 30 dias":
-            _fim_rapido = data_ref
-            _ini_rapido = (pd.Timestamp(data_ref) - pd.Timedelta(days=29)).date()
-    
-            _ini_rapido = max(_ini_rapido, data_min)
-            _fim_rapido = min(_fim_rapido, data_max)
-    
-            periodo_value = (_ini_rapido, _fim_rapido)
-            st.session_state["periodo_datas"] = periodo_value
-    
-        else:
-            periodo_value = st.session_state["periodo_datas"]
-    
+            _i = max((pd.Timestamp(data_ref) - pd.Timedelta(days=29)).date(), data_min)
+            st.session_state["periodo_datas"] = (_i, data_ref)
+
         periodo = st.sidebar.date_input(
             "Período de Venda",
             value=st.session_state["periodo_datas"],
@@ -2482,20 +1606,17 @@ try:
             key="periodo_datas",
             on_change=ao_mudar_periodo_manual,
         )
-    
+
         if isinstance(periodo, (list, tuple)) and len(periodo) == 2:
             data_ini = pd.Timestamp(periodo[0]).normalize()
             data_fim = pd.Timestamp(periodo[1]).normalize()
         else:
             data_ini = pd.Timestamp(st.session_state["periodo_datas"][0]).normalize()
             data_fim = pd.Timestamp(st.session_state["periodo_datas"][1]).normalize()
-    
-        st.sidebar.caption(
-            f"Última data na base: {pd.Timestamp(data_ref).strftime('%d/%m/%Y')}"
-        )
+
+        st.sidebar.caption(f"Última data na base: {pd.Timestamp(data_ref).strftime('%d/%m/%Y')}")
     else:
-        data_ini = None
-        data_fim = None
+        data_ini = data_fim = None
 
     # ──────────────────────────────────────────
     # 7. BASE FILTRADA
@@ -2513,42 +1634,33 @@ try:
     )
 
     if data_ini is not None and data_fim is not None:
-        df_f = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
+        df_f     = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", data_ini, data_fim)
         ini_ant, fim_ant, dias_periodo = periodo_anterior(data_ini, data_fim, periodo_rapido)
-        df_prev = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", ini_ant, fim_ant)
+        df_prev  = filtrar_intervalo(df_dim, "Data_Emissao_Filtro", ini_ant, fim_ant)
     else:
-        df_f = df_dim.copy()
+        df_f    = df_dim.copy()
         df_prev = df_dim.iloc[0:0].copy()
         ini_ant = fim_ant = None
         dias_periodo = 0
-    
+
     if incluir_devolucao and data_fim is not None:
         df_vendas_60d = filtrar_base_vendas_60d(
-            df_base=df,
-            data_fim=data_fim,
-            filiais_sel=filial_sel,
-            tipos_pedido_sel=tipo_pedido_sel,
-            marcas_sel=marca_sel,
-            categorias_sel=categoria_sel,
-            fornecedores_sel=fornecedor_sel,
-            somente_fulfillment=somente_fulfillment
+            df_base=df, data_fim=data_fim,
+            filiais_sel=filial_sel, tipos_pedido_sel=tipo_pedido_sel,
+            marcas_sel=marca_sel, categorias_sel=categoria_sel,
+            fornecedores_sel=fornecedor_sel, somente_fulfillment=somente_fulfillment,
         )
     else:
         df_vendas_60d = df.iloc[0:0].copy()
-    
-    if data_ini is not None and data_fim is not None:
-        df_grafico_base = df_dim.copy()
-    else:
-        df_grafico_base = df_dim.iloc[0:0].copy()
+
+    df_grafico_base = df_dim.copy() if (data_ini is not None and data_fim is not None) else df_dim.iloc[0:0].copy()
 
     # ──────────────────────────────────────────
     # 8. CABEÇALHO
     # ──────────────────────────────────────────
     col_logo, col_titulo = st.columns([0.8, 4.2])
-    
     with col_logo:
         st.image(LOGO_PATH, width=180)
-    
     with col_titulo:
         st.title("Dashboard de Performance de Vendas")
         st.caption(
@@ -2557,361 +1669,186 @@ try:
         )
 
     # ──────────────────────────────────────────
-    # 9. CSS
+    # 9. CSS  (mobile-first)
     # ──────────────────────────────────────────
     st.markdown(
         """
         <style>
-        /* ──────────────────────────────────────────────
-           MÉTRICAS PRINCIPAIS
-        ────────────────────────────────────────────── */
+        /* ── MÉTRICAS ──────────────────────────────── */
         div[data-testid="stMetric"] {
             background: rgba(255,255,255,0.02);
             border: 1px solid rgba(128,128,128,0.18);
             border-radius: 12px;
             padding: 14px 16px;
         }
-    
-        div[data-testid="stMetricLabel"] {
-            font-size: 0.95rem;
+        div[data-testid="stMetricLabel"] { font-size: 0.95rem; }
+        div[data-testid="stMetricValue"] { font-size: 1.45rem; line-height: 1.15; }
+
+        /* ── CONTÊINER DOS GRÁFICOS ALTAIR ────────── */
+        /*
+         * Permite scroll horizontal nos gráficos de barras fixas
+         * (chart_bar, chart_fornecedor) sem quebrar os responsivos.
+         * O wrapper é adicionado via st.markdown nos pontos de renderização.
+         */
+        .chart-scroll-wrapper {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            width: 100%;
         }
-    
-        div[data-testid="stMetricValue"] {
-            font-size: 1.45rem;
-            line-height: 1.15;
-        }
-    
-        /* ──────────────────────────────────────────────
-           CARDS DOS RANKINGS
-        ────────────────────────────────────────────── */
+
+        /* ── RANKING CARDS ─────────────────────────── */
         .ranking-card {
             border: 1px solid rgba(128,128,128,0.18);
             border-radius: 16px;
             padding: 12px 14px;
             margin-bottom: 12px;
             background: transparent;
-            box-shadow: none;
         }
-    
         .ranking-card-grid {
             display: grid;
             grid-template-columns: 44px 72px minmax(0, 1fr) 227px;
             gap: 12px;
             align-items: center;
         }
-    
-        .ranking-pos {
-            font-size: 1rem;
-            font-weight: 700;
-            color: #334155;
-            text-align: center;
-        }
-    
+        .ranking-pos { font-size: 1rem; font-weight: 700; color: #334155; text-align: center; }
         .ranking-img-wrap {
-            width: 72px;
-            height: 72px;
+            width: 72px; height: 72px;
             border-radius: 12px;
             border: 1px solid rgba(128,128,128,0.16);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            background: rgba(255,255,255,0.02);
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; background: rgba(255,255,255,0.02);
         }
-    
-        .ranking-img-wrap img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-    
-        .ranking-title {
-            font-size: 1rem;
-            font-weight: 700;
-            line-height: 1.25;
-            word-break: break-word;
-        }
-    
-        .ranking-subtitle {
-            font-size: 0.88rem;
-            color: #64748b;
-            margin-top: 4px;
-            word-break: break-word;
-        }
-    
-        /* ──────────────────────────────────────────────
-           CAIXA DE MÉTRICAS DO RANKING
-        ────────────────────────────────────────────── */
+        .ranking-img-wrap img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .ranking-title    { font-size: 1rem; font-weight: 700; line-height: 1.25; word-break: break-word; }
+        .ranking-subtitle { font-size: 0.88rem; color: #64748b; margin-top: 4px; word-break: break-word; }
+
         .ranking-metrics {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            align-items: flex-end;
-            text-align: right;
-            white-space: nowrap;
-            padding: 10px 12px;
-            border-radius: 12px;
-            background: transparent;
+            display: flex; flex-direction: column; gap: 8px;
+            align-items: flex-end; text-align: right; white-space: nowrap;
+            padding: 10px 12px; border-radius: 12px;
             border: 1px solid rgba(128,128,128,0.14);
-            width: 227px;
-            max-width: 227px;
-            justify-self: end;
-            min-width: 0;
-            box-sizing: border-box;
+            width: 227px; max-width: 227px; justify-self: end;
+            min-width: 0; box-sizing: border-box;
         }
-    
-        .ranking-metrics > div:not(.ranking-chips-row) {
-            width: 100%;
-            text-align: right;
-        }
-    
-        .ranking-metrics strong {
-            font-weight: 700;
-        }
-    
-        /* ──────────────────────────────────────────────
-           CHIPS DE MARGEM E VARIAÇÃO
-        ────────────────────────────────────────────── */
+        .ranking-metrics > div:not(.ranking-chips-row) { width: 100%; text-align: right; }
+        .ranking-metrics strong { font-weight: 700; }
+
         .ranking-chips-row {
-            display: flex;
-            flex-direction: row;
-            gap: 6px;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: nowrap;
-            white-space: nowrap;
-            width: 100%;
-            text-align: center;
-            align-self: center;
+            display: flex; flex-direction: row; gap: 6px;
+            justify-content: space-between; align-items: center;
+            flex-wrap: nowrap; white-space: nowrap;
+            width: 100%; text-align: center; align-self: center;
         }
-    
         .ranking-chip {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 4px 7px;
-            border-radius: 999px;
-            font-size: 0.74rem;
-            line-height: 1.2;
-            white-space: nowrap;
-            box-sizing: border-box;
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 4px 7px; border-radius: 999px;
+            font-size: 0.74rem; line-height: 1.2; white-space: nowrap; box-sizing: border-box;
         }
 
-        /* ──────────────────────────────────────────────
-           RESPONSIVO
-        ────────────────────────────────────────────── */
+        /* ── RESPONSIVO ──────────────────────────────── */
         @media (max-width: 1100px) {
-            .ranking-card-grid {
-                grid-template-columns: 44px 72px minmax(0, 1fr) 227px;
-            }
-    
-            .ranking-chip {
-                font-size: 0.72rem;
-                padding: 4px 6px;
-            }
+            .ranking-card-grid { grid-template-columns: 44px 72px minmax(0, 1fr) 227px; }
+            .ranking-chip { font-size: 0.72rem; padding: 4px 6px; }
         }
-    
+
         @media (max-width: 900px) {
-            .ranking-card-grid {
-                grid-template-columns: 40px 64px minmax(0, 1fr);
-            }
-    
-            .ranking-img-wrap {
-                width: 64px;
-                height: 64px;
-            }
-    
+            /* Ranking: colapsa métricas para linha extra */
+            .ranking-card-grid { grid-template-columns: 40px 64px minmax(0, 1fr); }
+            .ranking-img-wrap  { width: 64px; height: 64px; }
             .ranking-metrics {
-                grid-column: 1 / -1;
-                margin-top: 8px;
-                width: 100%;
-                max-width: 100%;
-                justify-self: stretch;
-                align-items: flex-end;
-                text-align: right;
-                white-space: normal;
+                grid-column: 1 / -1; margin-top: 8px;
+                width: 100%; max-width: 100%; justify-self: stretch;
+                align-items: flex-end; text-align: right; white-space: normal;
             }
-    
-            .ranking-metrics > div:not(.ranking-chips-row) {
-                text-align: left;
-            }
-    
-            .ranking-chips-row {
-                justify-content: left;
-                flex-wrap: wrap;
-                white-space: normal;
-            }
+            .ranking-metrics > div:not(.ranking-chips-row) { text-align: left; }
+            .ranking-chips-row { justify-content: left; flex-wrap: wrap; white-space: normal; }
         }
-    
+
         @media (max-width: 480px) {
-            .ranking-card {
-                padding: 10px 12px;
-            }
-    
-            .ranking-card-grid {
-                grid-template-columns: 34px 56px minmax(0, 1fr);
-                gap: 10px;
-            }
-    
-            .ranking-pos {
-                font-size: 0.9rem;
-            }
-    
-            .ranking-img-wrap {
-                width: 56px;
-                height: 56px;
-                border-radius: 10px;
-            }
-    
-            .ranking-title {
-                font-size: 0.95rem;
-            }
-    
-            .ranking-subtitle {
-                font-size: 0.82rem;
-            }
-    
-            .ranking-metrics {
-                padding: 10px;
-                gap: 7px;
-                align-items: flex-end;
-                text-align: right;
-            }
-    
-            .ranking-metrics > div:not(.ranking-chips-row) {
-                text-align: left;
-            }
-    
-            .ranking-chips-row {
-                justify-content: left;
-                flex-wrap: wrap;
-            }
-    
-            .ranking-chip {
-                font-size: 0.72rem;
-                padding: 4px 6px;
-            }
+            .ranking-card { padding: 10px 12px; }
+            .ranking-card-grid { grid-template-columns: 34px 56px minmax(0, 1fr); gap: 10px; }
+            .ranking-pos  { font-size: 0.9rem; }
+            .ranking-img-wrap  { width: 56px; height: 56px; border-radius: 10px; }
+            .ranking-title     { font-size: 0.95rem; }
+            .ranking-subtitle  { font-size: 0.82rem; }
+            .ranking-metrics   { padding: 10px; gap: 7px; align-items: flex-end; text-align: right; }
+            .ranking-metrics > div:not(.ranking-chips-row) { text-align: left; }
+            .ranking-chips-row { justify-content: left; flex-wrap: wrap; }
+            .ranking-chip { font-size: 0.72rem; padding: 4px 6px; }
+
+            /* Métricas principais: reduz fonte no mobile */
+            div[data-testid="stMetricValue"] { font-size: 1.15rem; }
+            div[data-testid="stMetricLabel"] { font-size: 0.82rem; }
         }
         </style>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-    
+
     # ──────────────────────────────────────────
     # 10. MÉTRICAS PRINCIPAIS
     # ──────────────────────────────────────────
-    receita_total = df_f["Receita_Num"].sum()
-    liquido_total = df_f["Liquido_Num"].sum()
-    custo_total = df_f["Custo_Num"].sum()
-    qtd_total = int(df_f["Qtd_Num"].sum())
-    total_pedidos = len(df_f)
-    
-    receita_anterior = df_prev["Receita_Num"].sum()
-    liquido_anterior = df_prev["Liquido_Num"].sum()
-    custo_anterior = df_prev["Custo_Num"].sum()
-    qtd_anterior = int(df_prev["Qtd_Num"].sum())
-    pedidos_anterior = len(df_prev)
+    receita_total   = df_f["Receita_Num"].sum()
+    liquido_total   = df_f["Liquido_Num"].sum()
+    custo_total     = df_f["Custo_Num"].sum()
+    qtd_total       = int(df_f["Qtd_Num"].sum())
+    total_pedidos   = len(df_f)
 
-    margem_total = calcular_margem_pct(liquido_total, custo_total)
+    receita_anterior  = df_prev["Receita_Num"].sum()
+    liquido_anterior  = df_prev["Liquido_Num"].sum()
+    custo_anterior    = df_prev["Custo_Num"].sum()
+    qtd_anterior      = int(df_prev["Qtd_Num"].sum())
+    pedidos_anterior  = len(df_prev)
+
+    margem_total    = calcular_margem_pct(liquido_total,    custo_total)
     margem_anterior = calcular_margem_pct(liquido_anterior, custo_anterior)
-    
-    ticket_medio = (receita_total / qtd_total) if qtd_total > 0 else 0.0
+
+    ticket_medio          = (receita_total   / qtd_total)   if qtd_total   > 0 else 0.0
     ticket_medio_anterior = (receita_anterior / qtd_anterior) if qtd_anterior > 0 else 0.0
-    
+
     if "Fornecedor" in df_f.columns:
-        receita_lotes = df_f.loc[
-            df_f["Fornecedor"].apply(normalizar_texto) == "LOTES",
-            "Receita_Num"
-        ].sum()
+        receita_lotes = df_f.loc[df_f["Fornecedor"].apply(normalizar_texto) == "LOTES", "Receita_Num"].sum()
     else:
         receita_lotes = 0.0
-    
-    pct_receita_lotes = (receita_lotes / receita_total) if receita_total > 0 else 0.0
-    pct_receita_complementar = 1 - pct_receita_lotes if receita_total > 0 else 0.0
-    
-    info_proj = calcular_status_e_projecao(
-        data_ini=data_ini,
-        data_fim=data_fim,
-        total_atual=receita_total
-    )
-    
-    rotulo_itens = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
-    
+
+    pct_receita_lotes        = (receita_lotes / receita_total)     if receita_total > 0 else 0.0
+    pct_receita_complementar = 1 - pct_receita_lotes               if receita_total > 0 else 0.0
+
+    info_proj      = calcular_status_e_projecao(data_ini=data_ini, data_fim=data_fim, total_atual=receita_total)
+    rotulo_itens   = "Itens Devolvidos" if incluir_devolucao else "Itens Vendidos"
+
     linha1 = st.columns(5)
     linha2 = st.columns(5)
-    
-    linha1[0].metric(
-        "Receita Total",
-        formatar_brl(receita_total),
-        calcular_delta_percentual(receita_total, receita_anterior)
-    )
-    
-    linha1[1].metric(
-        "Líquido Total",
-        formatar_brl(liquido_total),
-        calcular_delta_percentual(liquido_total, liquido_anterior)
-    )
-    
-    linha1[2].metric(
-        "Custo Total",
-        formatar_brl(custo_total),
-        calcular_delta_percentual(custo_total, custo_anterior)
-    )
-    
-    linha1[3].metric(
-        "Margem",
-        formatar_pct(margem_total),
-        calcular_delta_pontos_percentuais(margem_total, margem_anterior)
-    )
-    
-    linha1[4].metric(
-        "Ticket Médio",
-        formatar_brl(ticket_medio),
-        calcular_delta_percentual(ticket_medio, ticket_medio_anterior)
-    )
-    
-    linha2[0].metric(
-        rotulo_itens,
-        formatar_int(qtd_total),
-        calcular_delta_percentual(qtd_total, qtd_anterior)
-    )
-    
-    linha2[1].metric(
-        "Total de Pedidos",
-        formatar_int(total_pedidos),
-        calcular_delta_percentual(total_pedidos, pedidos_anterior)
-    )
-    
+
+    linha1[0].metric("Receita Total",  formatar_brl(receita_total),  calcular_delta_percentual(receita_total, receita_anterior))
+    linha1[1].metric("Líquido Total",  formatar_brl(liquido_total),  calcular_delta_percentual(liquido_total, liquido_anterior))
+    linha1[2].metric("Custo Total",    formatar_brl(custo_total),    calcular_delta_percentual(custo_total, custo_anterior))
+    linha1[3].metric("Margem",         formatar_pct(margem_total),   calcular_delta_pontos_percentuais(margem_total, margem_anterior))
+    linha1[4].metric("Ticket Médio",   formatar_brl(ticket_medio),   calcular_delta_percentual(ticket_medio, ticket_medio_anterior))
+
+    linha2[0].metric(rotulo_itens,     formatar_int(qtd_total),      calcular_delta_percentual(qtd_total, qtd_anterior))
+    linha2[1].metric("Total de Pedidos", formatar_int(total_pedidos), calcular_delta_percentual(total_pedidos, pedidos_anterior))
+
     if info_proj["status"] == "em_andamento":
         linha2[2].metric("Projeção do Mês", formatar_brl(info_proj["projecao"]))
     elif info_proj["status"] == "finalizado":
         linha2[2].metric("Projeção do Mês", "Mês finalizado")
     else:
         linha2[2].metric("Projeção do Mês", "N/D")
-    
-    linha2[3].metric(
-        "Receita Novos",
-        formatar_pct(pct_receita_complementar)
-    )
-    
-    linha2[4].metric(
-        "Receita Lotes",
-        formatar_pct(pct_receita_lotes)
-    )
+
+    linha2[3].metric("Receita Novos", formatar_pct(pct_receita_complementar))
+    linha2[4].metric("Receita Lotes", formatar_pct(pct_receita_lotes))
+
     if info_proj["status"] == "em_andamento":
         st.caption(
-            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
-            f"Projeção mensal: {info_proj['dias_passados']} dias passados, "
-            f"{info_proj['dias_restantes']} restantes, total de {info_proj['dias_mes']} dias."
+            f"Período anterior: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
+            f"Projeção: {info_proj['dias_passados']} dias passados, {info_proj['dias_restantes']} restantes, {info_proj['dias_mes']} no mês."
         )
     elif info_proj["status"] == "finalizado":
-        st.caption(
-            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
-        )
+        st.caption(f"Período anterior: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}")
     elif info_proj["status"] == "intervalo_parcial":
         st.caption(
-            f"Período anterior para comparação: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
+            f"Período anterior: {ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')} | "
             f"Para projetar o mês atual, o filtro precisa cobrir o mês desde o dia 1 até ontem."
         )
     elif info_proj["status"] == "multiplos_meses":
@@ -2923,15 +1860,14 @@ try:
     # 11. GRÁFICO: VENDAS POR DIA COM COMPARATIVO
     # ──────────────────────────────────────────
     st.subheader("Vendas por Dia com Comparativo do Período Anterior")
-    
+
     if (
-        data_ini is not None and
-        data_fim is not None and
+        data_ini is not None and data_fim is not None and
         not df_grafico_base.empty and
         "Dia_Grafico" in df_grafico_base.columns and
         df_grafico_base["Dia_Grafico"].notna().any()
     ):
-        df_cmp, ini_ant_chart, fim_ant_chart, dias_periodo_chart = montar_df_comparativo(
+        df_cmp, ini_ant_chart, fim_ant_chart, _ = montar_df_comparativo(
             df_base=df_grafico_base,
             coluna_data="Dia_Grafico",
             coluna_valor="Receita_Num",
@@ -2939,32 +1875,16 @@ try:
             data_fim=data_fim,
             modo_periodo=periodo_rapido,
         )
-        
-        df_resumo_periodos = montar_resumo_periodos_grafico(
-            df_atual=df_f,
-            df_anterior=df_prev,
-            data_ini=data_ini,
-            data_fim=data_fim,
-            ini_ant=ini_ant,
-            fim_ant=fim_ant,
-        )
-        
-        df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(
-            df_resumo_periodos
-        )
-        
+
+        df_resumo_periodos       = montar_resumo_periodos_grafico(df_f, df_prev, data_ini, data_fim, ini_ant, fim_ant)
+        df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(df_resumo_periodos)
+
         st.markdown("##### Resumo dos períodos")
-        
-        st.table(
-            df_resumo_periodos_tabela,
-            border="horizontal",
-            hide_index=True
-        )
-        
-        chart = criar_grafico_comparativo(df_cmp)
-        
-        st.altair_chart(chart, width="stretch")
-    
+        st.table(df_resumo_periodos_tabela, border="horizontal", hide_index=True)
+
+        # ── use_container_width=True (corrige width="stretch" inválido) ──
+        st.altair_chart(criar_grafico_comparativo(df_cmp), use_container_width=True)
+
         st.caption(
             f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
             f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
@@ -2972,33 +1892,25 @@ try:
         )
     else:
         st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
-    
+
     st.divider()
 
     # ──────────────────────────────────────────
     # 11.1 GRÁFICO: LOTES X NOVOS
     # ──────────────────────────────────────────
     st.subheader("Receita Lotes x Receita Novos por Dia")
-    
+
     if (
-        data_ini is not None and
-        data_fim is not None and
+        data_ini is not None and data_fim is not None and
         not df_grafico_base.empty and
         "Dia_Grafico" in df_grafico_base.columns and
         df_grafico_base["Dia_Grafico"].notna().any()
     ):
-        df_lotes_comp = montar_df_lotes_complementar(
-            df_base=df_grafico_base,
-            data_ini=data_ini,
-            data_fim=data_fim,
-        )
-    
+        df_lotes_comp = montar_df_lotes_complementar(df_grafico_base, data_ini, data_fim)
         if not df_lotes_comp.empty:
-            chart_lotes_comp = criar_grafico_lotes_complementar(df_lotes_comp)
-            st.altair_chart(chart_lotes_comp, width="stretch")
-    
+            st.altair_chart(criar_grafico_lotes_complementar(df_lotes_comp), use_container_width=True)
             st.caption(
-                f"Período analisado: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
+                f"Período: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
                 f"Comparação diária entre Receita Novos e Receita Lotes"
             )
         else:
@@ -3012,52 +1924,37 @@ try:
     st.subheader("Receita por Marketplace por Dia")
 
     if (
-        data_ini is not None and
-        data_fim is not None and
+        data_ini is not None and data_fim is not None and
         not df_f.empty and
         "Data_Emissao_Filtro" in df_f.columns and
         "Grupo de Marketplace" in df_f.columns
     ):
-        df_mkt_dia, ordem_mkt_dia = montar_df_marketplace_por_dia(
-            df_base=df_f,
-            data_ini=data_ini,
-            data_fim=data_fim
-        )
+        df_mkt_dia, ordem_mkt_dia = montar_df_marketplace_por_dia(df_f, data_ini, data_fim)
 
         if not df_mkt_dia.empty:
-            chart_mkt_dia = criar_grafico_marketplace_por_dia(
-                df_mkt_dia,
-                ordem_mkt_dia
-            )
+            chart_mkt_dia = criar_grafico_marketplace_por_dia(df_mkt_dia, ordem_mkt_dia)
 
             if chart_mkt_dia is not None:
-                aba_geral, aba_individual = st.tabs([
-                    "Visão geral",
-                    "Visão por marketplace"
-                ])
-            
+                aba_geral, aba_individual = st.tabs(["Visão geral", "Visão por marketplace"])
+
                 with aba_geral:
-                    st.altair_chart(chart_mkt_dia, width="stretch")
-            
+                    # ── use_container_width=True ──────────────────────
+                    st.altair_chart(chart_mkt_dia, use_container_width=True)
                     st.caption(
                         f"Receita diária por marketplace entre "
                         f"{data_ini.strftime('%d/%m/%Y')} e {data_fim.strftime('%d/%m/%Y')}. "
                         f"Esta visão preserva a comparação absoluta entre marketplaces."
                     )
-            
+
                 with aba_individual:
-                    chart_mkt_facetas = criar_grafico_marketplace_por_dia_facetas(
-                        df_mkt_dia,
-                        ordem_mkt_dia
-                    )
-            
+                    chart_mkt_facetas = criar_grafico_marketplace_por_dia_facetas(df_mkt_dia, ordem_mkt_dia)
                     if chart_mkt_facetas is not None:
-                        st.altair_chart(chart_mkt_facetas, width="stretch")
-            
+                        # ── use_container_width=True ──────────────────
+                        st.altair_chart(chart_mkt_facetas, use_container_width=True)
                         st.caption(
-                            "Cada marketplace usa uma escala própria no eixo Y. "
-                            "Essa visão facilita enxergar a variação diária dos marketplaces menores, "
-                            "mas não deve ser usada para comparar volumes absolutos entre eles."
+                            "Cada marketplace usa escala própria no eixo Y. "
+                            "Ideal para enxergar variação diária dos marketplaces menores — "
+                            "não comparar volumes absolutos entre eles."
                         )
         else:
             st.info("Sem dados para exibir a receita por marketplace por dia.")
@@ -3068,130 +1965,78 @@ try:
     # 12.1 GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Marketplace e Tipo de Pedido")
-    
+
     if not df_f.empty:
         filtro_mkt_ativo = bool(mkt_sel) and (not incluir_devolucao)
-    
+
         if filtro_mkt_ativo:
             df_mkt = (
                 df_f.groupby(["Grupo de Marketplace", "Tipo pedido"], as_index=False)
                 .agg(Receita=("Receita_Num", "sum"))
             )
-            
-            df_mkt["Receita_Total_Marketplace"] = (
-                df_mkt.groupby("Grupo de Marketplace")["Receita"]
-                .transform("sum")
-            )
-            
-            df_mkt = df_mkt.sort_values(
-                by=["Receita_Total_Marketplace", "Receita"],
-                ascending=[False, False]
-            )
-            
+            df_mkt["Receita_Total_Marketplace"] = df_mkt.groupby("Grupo de Marketplace")["Receita"].transform("sum")
+            df_mkt = df_mkt.sort_values(by=["Receita_Total_Marketplace", "Receita"], ascending=[False, False])
+
             ordem_marketplace = (
-                df_mkt[["Grupo de Marketplace", "Receita_Total_Marketplace"]]
-                .drop_duplicates()
-                .sort_values("Receita_Total_Marketplace", ascending=False)
-                ["Grupo de Marketplace"]
-                .tolist()
+                df_mkt[["Grupo de Marketplace","Receita_Total_Marketplace"]]
+                .drop_duplicates().sort_values("Receita_Total_Marketplace", ascending=False)
+                ["Grupo de Marketplace"].tolist()
             )
-            
             ordem_tipo_pedido = (
-                df_mkt.groupby("Tipo pedido", as_index=False)
-                .agg(Receita_Total_Tipo=("Receita", "sum"))
-                .sort_values("Receita_Total_Tipo", ascending=False)
-                ["Tipo pedido"]
-                .tolist()
+                df_mkt.groupby("Tipo pedido", as_index=False).agg(Receita_Total_Tipo=("Receita","sum"))
+                .sort_values("Receita_Total_Tipo", ascending=False)["Tipo pedido"].tolist()
             )
-            
-            df_mkt["Ordem_Tipo_Pedido"] = (
-                df_mkt.groupby("Grupo de Marketplace")["Receita"]
-                .rank(method="first", ascending=False)
-            )
-            
+            df_mkt["Ordem_Tipo_Pedido"] = df_mkt.groupby("Grupo de Marketplace")["Receita"].rank(method="first", ascending=False)
+
             chart_bar = (
-                alt.Chart(df_mkt)
-                .mark_bar()
+                alt.Chart(df_mkt).mark_bar()
                 .encode(
-                    y=alt.Y(
-                        "Grupo de Marketplace:N",
-                        title="Marketplace",
-                        sort=ordem_marketplace
-                    ),
-                    x=alt.X(
-                        "Receita:Q",
-                        title="Receita (R$)",
-                        stack="zero"
-                    ),
-                    color=alt.Color(
-                        "Tipo pedido:N",
-                        title="Tipo de Pedido",
-                        scale=alt.Scale(domain=ordem_tipo_pedido)
-                    ),
-                    order=alt.Order(
-                        "Ordem_Tipo_Pedido:Q",
-                        sort="ascending"
-                    ),
+                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort=ordem_marketplace),
+                    x=alt.X("Receita:Q", title="R$", stack="zero"),
+                    color=alt.Color("Tipo pedido:N", title="Tipo de Pedido", scale=alt.Scale(domain=ordem_tipo_pedido)),
+                    order=alt.Order("Ordem_Tipo_Pedido:Q", sort="ascending"),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                        alt.Tooltip("Tipo pedido:N", title="Tipo de Pedido"),
-                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
-                        alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
+                        alt.Tooltip("Tipo pedido:N",          title="Tipo de Pedido"),
+                        alt.Tooltip("Receita:Q",              title="R$",        format=",.2f"),
+                        alt.Tooltip("Receita_Total_Marketplace:Q", title="Total MKT", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
             )
-    
         else:
             df_mkt = (
                 df_f.groupby("Grupo de Marketplace", as_index=False)
-                .agg(Receita=("Receita_Num", "sum"))
+                .agg(Receita=("Receita_Num","sum"))
                 .sort_values("Receita", ascending=False)
             )
-        
             ordem_marketplace = df_mkt["Grupo de Marketplace"].tolist()
-        
             chart_bar = (
-                alt.Chart(df_mkt)
-                .mark_bar()
+                alt.Chart(df_mkt).mark_bar()
                 .encode(
-                    y=alt.Y(
-                        "Grupo de Marketplace:N",
-                        title="Marketplace",
-                        sort=ordem_marketplace
-                    ),
-                    x=alt.X(
-                        "Receita:Q",
-                        title="Receita (R$)"
-                    ),
+                    y=alt.Y("Grupo de Marketplace:N", title="Marketplace", sort=ordem_marketplace),
+                    x=alt.X("Receita:Q", title="R$"),
                     color=alt.Color(
-                        "Grupo de Marketplace:N",
-                        title="Marketplace",
-                        scale=alt.Scale(
-                            domain=MARKETPLACE_ORDEM_CORES,
-                            range=MARKETPLACE_CORES
-                        ),
-                        legend=alt.Legend(
-                            orient="top",
-                            direction="horizontal"
-                        )
+                        "Grupo de Marketplace:N", title="Marketplace",
+                        scale=alt.Scale(domain=MARKETPLACE_ORDEM_CORES, range=MARKETPLACE_CORES),
+                        legend=alt.Legend(orient="top", direction="horizontal"),
                     ),
                     tooltip=[
                         alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
-                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                        alt.Tooltip("Receita:Q",              title="R$", format=",.2f"),
                     ],
                 )
                 .properties(height=380)
             )
-    
-        st.altair_chart(chart_bar, width="stretch")
-    
+
+        st.altair_chart(chart_bar, use_container_width=True)
+
         if incluir_devolucao:
             st.caption("Exibindo apenas pedidos de devolução.")
         elif filtro_mkt_ativo:
-            st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo. Marketplaces ordenados por maior receita total.")
+            st.caption("Detalhado por Tipo de Pedido porque há filtro de marketplace ativo.")
         else:
-            st.caption("Total por grupo de marketplace. Selecione marketplaces específicos para detalhar por tipo de pedido.")
+            st.caption("Total por grupo de marketplace. Selecione marketplaces para detalhar por tipo de pedido.")
     else:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
@@ -3199,54 +2044,46 @@ try:
     # 12.2 GRÁFICO: FATURAMENTO POR FORNECEDOR
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Fornecedor")
-    
+
     if "Fornecedor" not in df_f.columns:
-        st.info("Coluna 'Fornecedor' não encontrada para exibir o gráfico.")
+        st.info("Coluna 'Fornecedor' não encontrada.")
     elif df_f.empty:
         st.info("Sem dados para exibir o faturamento por fornecedor.")
     else:
         df_fornecedor = (
-            df_f[
-                df_f["Fornecedor"].notna() &
-                (df_f["Fornecedor"].astype(str).str.strip() != "")
-            ]
-            .groupby("Fornecedor")["Receita_Num"]
-            .sum()
-            .reset_index()
+            df_f[df_f["Fornecedor"].notna() & (df_f["Fornecedor"].astype(str).str.strip() != "")]
+            .groupby("Fornecedor")["Receita_Num"].sum().reset_index()
             .rename(columns={"Receita_Num": "Receita"})
             .sort_values("Receita", ascending=True).head(20)
         )
-    
+
         if df_fornecedor.empty:
-            st.info("Sem dados válidos de fornecedor para exibir o gráfico.")
+            st.info("Sem dados válidos de fornecedor.")
         else:
             chart_fornecedor = (
-                alt.Chart(df_fornecedor)
-                .mark_bar()
+                alt.Chart(df_fornecedor).mark_bar()
                 .encode(
                     y=alt.Y("Fornecedor:N", title="Fornecedor", sort="-x"),
-                    x=alt.X("Receita:Q", title="Receita (R$)"),
+                    x=alt.X("Receita:Q", title="R$"),
                     tooltip=[
                         alt.Tooltip("Fornecedor:N", title="Fornecedor"),
-                        alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                        alt.Tooltip("Receita:Q",    title="R$", format=",.2f"),
                     ],
                 )
                 .properties(height=max(320, min(900, len(df_fornecedor) * 28)))
             )
-    
-            st.altair_chart(chart_fornecedor, width="stretch")
-        
+            st.altair_chart(chart_fornecedor, use_container_width=True)
+
     # ──────────────────────────────────────────
     # 13. RANKINGS
     # ──────────────────────────────────────────
     st.subheader("Rankings")
 
     abas_ranking = [
-        ("Produtos", "Produto"),
-        ("Categorias", "Categoria"),
-        ("Marcas", "Marca"),
+        ("Produtos",    "Produto"),
+        ("Categorias",  "Categoria"),
+        ("Marcas",      "Marca"),
     ]
-
     if "Fornecedor" in df_f.columns:
         abas_ranking.append(("Fornecedores", "Fornecedor"))
 
@@ -3258,150 +2095,50 @@ try:
                 st.info(f"Coluna '{campo}' não encontrada.")
                 continue
 
-            top_n = st.slider(
-                "Número de itens no ranking",
-                5,
-                35,
-                20,
-                key=f"top_n_{campo}"
-            )
+            top_n = st.slider("Número de itens no ranking", 5, 35, 20, key=f"top_n_{campo}")
 
             rotulo_qtd = "Por Quantidade Devolvida" if incluir_devolucao else "Por Quantidade Vendida"
             subtab_receita, subtab_qtd = st.tabs(["Por Receita", rotulo_qtd])
 
-            with subtab_receita:
-                if campo == "Produto":
-                    df_rank = montar_ranking_produto(
-                        df_f,
-                        df_prev,
-                        df_vendas_60d=df_vendas_60d,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                    if not incluir_devolucao:
-                        df_rank = filtrar_ranking_margem_negativa(
-                            df_rank,
-                            somente_margem_negativa
+            for subtab, metrica in [(subtab_receita, "Receita"), (subtab_qtd, "Quantidade")]:
+                with subtab:
+                    if campo == "Produto":
+                        df_rank = montar_ranking_produto(df_f, df_prev, df_vendas_60d=df_vendas_60d, incluir_devolucao=incluir_devolucao)
+                        if not incluir_devolucao:
+                            df_rank = filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa)
+
+                        st.caption(
+                            f"Comparação por {metrica.lower()} contra o período anterior: "
+                            f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
+                            if ini_ant is not None and fim_ant is not None else
+                            f"Comparação por {metrica.lower()} contra o período anterior"
                         )
-            
-                    st.caption(
-                        f"Comparação por receita contra o período anterior: "
-                        f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
-                        if ini_ant is not None and fim_ant is not None else
-                        "Comparação por receita contra o período anterior"
-                    )
-            
-                    if incluir_devolucao:
-                        st.caption("Exibindo taxa de devolução com base na quantidade vendida nos últimos 60 dias.")
-                    elif somente_margem_negativa:
-                        st.caption("Exibindo somente produtos com margem negativa.")
-            
-                    render_ranking_produto(
-                        df_rank,
-                        "Receita",
-                        top_n,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                else:
-                    df_rank = montar_ranking_grupo(
-                        df_f,
-                        df_prev,
-                        campo,
-                        "Receita",
-                        df_vendas_60d=df_vendas_60d,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                    if not incluir_devolucao:
-                        df_rank = filtrar_ranking_margem_negativa(
-                            df_rank,
-                            somente_margem_negativa
-                        )
-            
-                    st.caption(
-                        f"A imagem exibida é do produto com maior receita dentro de cada {campo.lower()}."
-                    )
-            
-                    if incluir_devolucao:
-                        st.caption(f"Exibindo taxa de devolução por {campo.lower()} com base nos últimos 60 dias.")
-                    elif somente_margem_negativa:
-                        st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
-            
-                    render_ranking_grupo(
-                        df_rank,
-                        campo,
-                        "Receita",
-                        top_n,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-            with subtab_qtd:
-                if campo == "Produto":
-                    df_rank = montar_ranking_produto(
-                        df_f,
-                        df_prev,
-                        df_vendas_60d=df_vendas_60d,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                    if not incluir_devolucao:
-                        df_rank = filtrar_ranking_margem_negativa(
-                            df_rank,
-                            somente_margem_negativa
-                        )
-            
-                    st.caption(
-                        f"Comparação por quantidade contra o período anterior: "
-                        f"{ini_ant.strftime('%d/%m/%Y')} até {fim_ant.strftime('%d/%m/%Y')}"
-                        if ini_ant is not None and fim_ant is not None else
-                        "Comparação por quantidade contra o período anterior"
-                    )
-            
-                    if incluir_devolucao:
-                        st.caption("Exibindo quantidade devolvida e taxa de devolução com base nos últimos 60 dias.")
-                    elif somente_margem_negativa:
-                        st.caption("Exibindo somente produtos com margem negativa.")
-            
-                    render_ranking_produto(
-                        df_rank,
-                        "Quantidade",
-                        top_n,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                else:
-                    df_rank = montar_ranking_grupo(
-                        df_f,
-                        df_prev,
-                        campo,
-                        "Quantidade",
-                        df_vendas_60d=df_vendas_60d,
-                        incluir_devolucao=incluir_devolucao
-                    )
-            
-                    if not incluir_devolucao:
-                        df_rank = filtrar_ranking_margem_negativa(
-                            df_rank,
-                            somente_margem_negativa
-                        )
-            
-                    st.caption(
-                        f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}."
-                    )
-            
-                    if incluir_devolucao:
-                        st.caption(f"Exibindo quantidade devolvida e taxa de devolução por {campo.lower()} com base nos últimos 60 dias.")
-                    elif somente_margem_negativa:
-                        st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
-            
-                    render_ranking_grupo(
-                        df_rank,
-                        campo,
-                        "Quantidade",
-                        top_n,
-                        incluir_devolucao=incluir_devolucao
-                    )
+                        if incluir_devolucao:
+                            if metrica == "Receita":
+                                st.caption("Exibindo taxa de devolução com base nos últimos 60 dias.")
+                            else:
+                                st.caption("Exibindo quantidade devolvida e taxa de devolução com base nos últimos 60 dias.")
+                        elif somente_margem_negativa:
+                            st.caption("Exibindo somente produtos com margem negativa.")
+
+                        render_ranking_produto(df_rank, metrica, top_n, incluir_devolucao=incluir_devolucao)
+
+                    else:
+                        df_rank = montar_ranking_grupo(df_f, df_prev, campo, metrica, df_vendas_60d=df_vendas_60d, incluir_devolucao=incluir_devolucao)
+                        if not incluir_devolucao:
+                            df_rank = filtrar_ranking_margem_negativa(df_rank, somente_margem_negativa)
+
+                        if metrica == "Receita":
+                            st.caption(f"A imagem exibida é do produto com maior receita dentro de cada {campo.lower()}.")
+                        else:
+                            st.caption(f"A imagem exibida é do produto com maior quantidade dentro de cada {campo.lower()}.")
+
+                        if incluir_devolucao:
+                            st.caption(f"Exibindo taxa de devolução por {campo.lower()} com base nos últimos 60 dias.")
+                        elif somente_margem_negativa:
+                            st.caption(f"Exibindo somente {campo.lower()}s com margem negativa.")
+
+                        render_ranking_grupo(df_rank, campo, metrica, top_n, incluir_devolucao=incluir_devolucao)
 
     st.divider()
 
@@ -3410,23 +2147,12 @@ try:
     # ──────────────────────────────────────────
     with st.expander("Ver Detalhamento dos Pedidos"):
         colunas_base = [
-            "Data emissao",
-            "Data da Venda",
-            "Grupo de Marketplace",
-            "Tipo pedido",
-            "Categoria",
-            "Marca",
-            "Fornecedor",
-            "Produto",
-            "Receita",
-            "Liquido",
-            "Custo medio",
-            "Quantidade vendida",
-            "Status do pedido",
+            "Data emissao", "Data da Venda", "Grupo de Marketplace", "Tipo pedido",
+            "Categoria", "Marca", "Fornecedor", "Produto",
+            "Receita", "Liquido", "Custo medio", "Quantidade vendida", "Status do pedido",
         ]
-
         colunas_exibir = [c for c in colunas_base if c in df_f.columns]
-        st.dataframe(df_f[colunas_exibir], width="stretch")
+        st.dataframe(df_f[colunas_exibir], use_container_width=True)
 
 except Exception as e:
     st.error(f"Não foi possível carregar os dados: {e}")
