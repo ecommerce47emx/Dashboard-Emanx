@@ -1563,40 +1563,62 @@ def montar_resumo_periodos_grafico(
 
     return df_resumo
 
-def estilizar_variacao_resumo(row):
-    estilos = []
+def render_tabela_resumo_periodos(df_resumo):
+    if df_resumo.empty:
+        return
 
-    for coluna, valor in row.items():
-        if row.get("Período") != "Variação":
-            estilos.append("")
-            continue
+    colunas_visiveis = [
+        col for col in df_resumo.columns
+        if col != "Intervalo"
+    ]
 
-        if coluna in ["Período", "Intervalo"]:
-            estilos.append(
-                "background-color:rgba(100,116,139,0.10); "
-                "color:#334155;"
+    thead = "".join([
+        f'<th>{html.escape(str(col))}</th>'
+        for col in colunas_visiveis
+    ])
+
+    linhas_html = []
+
+    for _, row in df_resumo.iterrows():
+        periodo = str(row.get("Período", "")).strip()
+        cells = []
+
+        for col in colunas_visiveis:
+            valor = str(row.get(col, "")).strip()
+            classe = ""
+
+            if periodo == "Variação":
+                if col in ["Período"]:
+                    classe = "resumo-var-neutra"
+                elif valor.startswith("+") or valor == "Novo":
+                    classe = "resumo-var-up"
+                elif valor.startswith("-"):
+                    classe = "resumo-var-down"
+                else:
+                    classe = "resumo-var-neutra"
+
+            cells.append(
+                f'<td class="{classe}">{html.escape(valor)}</td>'
             )
-            continue
 
-        texto = str(valor).strip()
+        linhas_html.append(
+            "<tr>" + "".join(cells) + "</tr>"
+        )
 
-        if texto.startswith("+") or texto == "Novo":
-            estilos.append(
-                "background-color:rgba(34,197,94,0.16); "
-                "color:#15803d;"
-            )
-        elif texto.startswith("-"):
-            estilos.append(
-                "background-color:rgba(239,68,68,0.16); "
-                "color:#dc2626;"
-            )
-        else:
-            estilos.append(
-                "background-color:rgba(100,116,139,0.10); "
-                "color:#475569;"
-            )
+    tabela_html = f"""
+    <div class="resumo-periodos-wrap">
+        <table class="resumo-periodos-table">
+            <thead>
+                <tr>{thead}</tr>
+            </thead>
+            <tbody>
+                {''.join(linhas_html)}
+            </tbody>
+        </table>
+    </div>
+    """
 
-    return estilos
+    st.markdown(tabela_html, unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
@@ -2087,6 +2109,74 @@ try:
             white-space: nowrap;
             box-sizing: border-box;
         }
+        /* ──────────────────────────────────────────────
+           TABELA RESUMO DO GRÁFICO COMPARATIVO
+        ────────────────────────────────────────────── */
+        .resumo-periodos-wrap {
+            width: 100%;
+            overflow-x: auto;
+            margin-bottom: 10px;
+        }
+        
+        .resumo-periodos-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 0.92rem;
+            background: transparent;
+        }
+        
+        .resumo-periodos-table th {
+            text-align: left;
+            padding: 8px 10px;
+            color: #475569;
+            background: rgba(100,116,139,0.08);
+            border-bottom: 1px solid rgba(128,128,128,0.16);
+            white-space: nowrap;
+            font-weight: 400;
+        }
+        
+        .resumo-periodos-table td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(128,128,128,0.10);
+            white-space: nowrap;
+            color: inherit;
+        }
+        
+        .resumo-periodos-table th:not(:last-child),
+        .resumo-periodos-table td:not(:last-child) {
+            border-right: 1px solid rgba(128,128,128,0.08);
+        }
+        
+        .resumo-periodos-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .resumo-periodos-table th:first-child,
+        .resumo-periodos-table td:first-child {
+            padding-left: 0;
+        }
+        
+        .resumo-periodos-table th:last-child,
+        .resumo-periodos-table td:last-child {
+            padding-right: 0;
+        }
+        
+        .resumo-var-up {
+            background: rgba(34,197,94,0.16);
+            color: #15803d !important;
+        }
+        
+        .resumo-var-down {
+            background: rgba(239,68,68,0.16);
+            color: #dc2626 !important;
+        }
+        
+        .resumo-var-neutra {
+            background: rgba(100,116,139,0.10);
+            color: #475569 !important;
+        }
+        
     
         /* ──────────────────────────────────────────────
            RESPONSIVO
@@ -2339,21 +2429,7 @@ try:
             fim_ant=fim_ant_chart,
         )
         
-        try:
-            st.dataframe(
-                df_resumo_periodos.style.apply(estilizar_variacao_resumo, axis=1),
-                hide_index=True,
-                width="stretch",
-                height=145
-            )
-        except Exception as e:
-            st.warning(f"Não foi possível aplicar a estilização da tabela: {e}")
-            st.dataframe(
-                df_resumo_periodos,
-                hide_index=True,
-                width="stretch",
-                height=145
-            )
+        render_tabela_resumo_periodos(df_resumo_periodos)
         
         chart = criar_grafico_comparativo(df_cmp)
         
