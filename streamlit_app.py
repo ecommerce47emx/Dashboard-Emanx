@@ -999,6 +999,69 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
         .configure_view(strokeWidth=0)
     )
 
+def montar_resumo_lotes_novos_grafico(df_lotes_comp, data_ini, data_fim):
+    if df_lotes_comp.empty:
+        return pd.DataFrame()
+
+    base = df_lotes_comp.copy()
+    base["Valor"] = pd.to_numeric(base["Valor"], errors="coerce").fillna(0)
+
+    intervalo = (
+        f"{pd.Timestamp(data_ini).strftime('%d/%m/%Y')} até "
+        f"{pd.Timestamp(data_fim).strftime('%d/%m/%Y')}"
+    )
+
+    resumo = (
+        base.groupby("Serie", as_index=False)
+        .agg(
+            Receita_Total=("Valor", "sum"),
+            Media_Diaria=("Valor", "mean"),
+            Maior_Dia=("Valor", "max"),
+            Dias_Com_Receita=("Valor", lambda x: int((x > 0).sum())),
+        )
+    )
+
+    maior_dia = (
+        base.sort_values(["Serie", "Valor", "Data_Original"], ascending=[True, False, True])
+        .drop_duplicates(subset=["Serie"], keep="first")
+        [["Serie", "Data_Original"]]
+        .rename(columns={"Data_Original": "Data_Maior_Dia"})
+    )
+
+    resumo = resumo.merge(maior_dia, on="Serie", how="left")
+
+    ordem_series = ["Receita Novos", "Receita Lotes"]
+    resumo["Serie"] = pd.Categorical(
+        resumo["Serie"],
+        categories=ordem_series,
+        ordered=True
+    )
+
+    resumo = resumo.sort_values("Serie").reset_index(drop=True)
+
+    resumo["Intervalo"] = intervalo
+    resumo["Receita Total"] = resumo["Receita_Total"].apply(formatar_brl)
+    resumo["Média Diária"] = resumo["Media_Diaria"].apply(formatar_brl)
+    resumo["Maior Dia"] = resumo["Maior_Dia"].apply(formatar_brl)
+    resumo["Data do Maior Dia"] = resumo["Data_Maior_Dia"].apply(
+        lambda x: pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else ""
+    )
+    resumo["Dias com Receita"] = resumo["Dias_Com_Receita"].apply(formatar_int)
+
+    resumo = resumo.rename(columns={"Serie": "Série"})
+
+    return resumo[
+        [
+            "Série",
+            "Intervalo",
+            "Receita Total",
+            "Média Diária",
+            "Maior Dia",
+            "Data do Maior Dia",
+            "Dias com Receita",
+        ]
+    ]
+
 # ──────────────────────────────────────────────
 # GRÁFICO: RECEITA POR MARKETPLACE POR DIA
 # ──────────────────────────────────────────────
@@ -1937,15 +2000,87 @@ try:
         "Dia_Grafico" in df_grafico_base.columns and
         df_grafico_base["Dia_Grafico"].notna().any()
     ):
-        df_lotes_comp = montar_df_lotes_complementar(df_grafico_base, data_ini, data_fim)
+        df_lotes_comp = montar_df_lotes_complementar(
+            df_grafico_base,
+            data_ini,
+            data_fim
+        )
+
         if not df_lotes_comp.empty:
-            st.altair_chart(criar_grafico_lotes_complementar(df_lotes_comp), use_container_width=True)
-            st.caption(
-                f"Período: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
-                f"Comparação diária entre Receita Novos e Receita Lotes"
+            aba_grafico_lotes, aba_detalhamento_lotes = st.tabs(
+                ["Gráfico", "Detalhamento"]
             )
+
+            with aba_grafico_lotes:
+                st.altair_chart(
+                    criar_grafico_lotes_complementar(df_lotes_comp),
+                    use_container_width=True
+                )
+
+                st.caption(
+                    f"Período: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
+                    f"Comparação diária entre Receita Novos e Receita Lotes"
+                )
+
+            with aba_detalhamento_lotes:
+                df_resumo_lotes_novos = montar_resumo_lotes_novos_grafico(
+                    df_lotes_comp,
+                    data_ini,
+                    data_fim
+                )
+
+                st.caption(
+                    "Resumo das receitas de Novos e Lotes no período selecionado, sem cálculo de variação percentual."
+                )
+
+                st.table(
+                    df_resumo_lotes_novos,
+                    border="horizontal",
+                    hide_index=True
+                )
+
+                with st.expander("Ver detalhamento diário"):
+                    df_diario_lotes_novos = (
+                        df_lotes_comp
+                        .pivot_table(
+                            index="Data_Original",
+                            columns="Serie",
+                            values="Valor",
+                            aggfunc="sum",
+                            fill_value=0
+                        )
+                        .reset_index()
+                    )
+
+                    df_diario_lotes_novos["Data"] = df_diario_lotes_novos["Data_Original"].apply(
+                        lambda x: pd.Timestamp(x).strftime("%d/%m/%Y")
+                    )
+
+                    for col in ["Receita Novos", "Receita Lotes"]:
+                        if col not in df_diario_lotes_novos.columns:
+                            df_diario_lotes_novos[col] = 0.0
+
+                        df_diario_lotes_novos[col] = df_diario_lotes_novos[col].apply(
+                            formatar_brl
+                        )
+
+                    df_diario_lotes_novos = df_diario_lotes_novos[
+                        [
+                            "Data",
+                            "Receita Novos",
+                            "Receita Lotes",
+                        ]
+                    ]
+
+                    st.dataframe(
+                        df_diario_lotes_novos,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+
         else:
             st.info("Sem dados para exibir o gráfico de Lotes x Novos no período selecionado.")
+
     else:
         st.info("Sem dados válidos para exibir o gráfico de Lotes x Novos.")
 
