@@ -1089,15 +1089,19 @@ def preparar_tabela_resumo_lotes_novos(df_resumo):
 
     def fmt_serie(valor):
         txt = str(valor).strip()
+
         if txt == "Novos":
-            return "🆕 Novos"
+            return ":material/new_releases: Novos"
+
         if txt == "Lotes":
-            return "📦 Lotes"
+            return ":material/inventory_2: Lotes"
+
         return txt
 
     df_tabela["Série"] = df_tabela["Série"].apply(fmt_serie)
 
     return df_tabela
+
 # ──────────────────────────────────────────────
 # GRÁFICO: RECEITA POR MARKETPLACE POR DIA
 # ──────────────────────────────────────────────
