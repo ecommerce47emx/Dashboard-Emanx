@@ -1703,6 +1703,99 @@ def preparar_tabela_resumo_marketplace_tipo_pedido(df_resumo, filtro_mkt_ativo=F
 
     return df_tabela
 
+def montar_resumo_fornecedor(df_base):
+    if df_base.empty:
+        return pd.DataFrame()
+
+    colunas_necessarias = [
+        "Fornecedor",
+        "Receita_Num",
+        "Liquido_Num",
+        "Custo_Num",
+        "Qtd_Num",
+    ]
+
+    if not all(col in df_base.columns for col in colunas_necessarias):
+        return pd.DataFrame()
+
+    base = df_base[
+        df_base["Fornecedor"].notna() &
+        (df_base["Fornecedor"].astype(str).str.strip() != "")
+    ].copy()
+
+    if base.empty:
+        return pd.DataFrame()
+
+    resumo = (
+        base.groupby("Fornecedor", as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Liquido=("Liquido_Num", "sum"),
+            Custo=("Custo_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+        )
+    )
+
+    if resumo.empty:
+        return pd.DataFrame()
+
+    total_receita = float(resumo["Receita"].sum())
+
+    resumo["Margem_Pct"] = resumo.apply(
+        lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
+        axis=1
+    )
+
+    resumo["Ticket_Medio"] = resumo.apply(
+        lambda row: (row["Receita"] / row["Quantidade"]) if row["Quantidade"] > 0 else 0.0,
+        axis=1
+    )
+
+    resumo["Percentual_Total"] = resumo["Receita"].apply(
+        lambda x: (x / total_receita) if total_receita > 0 else 0.0
+    )
+
+    resumo = resumo.sort_values(
+        by="Receita",
+        ascending=False
+    ).reset_index(drop=True)
+
+    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
+    resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
+    resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
+    resumo["Quantidade"] = resumo["Quantidade"].apply(formatar_int)
+    resumo["Margem"] = resumo["Margem_Pct"].apply(formatar_pct)
+    resumo["Ticket Médio"] = resumo["Ticket_Medio"].apply(formatar_brl)
+
+    return resumo[
+        [
+            "Fornecedor",
+            "Percentual do Total",
+            "Receita Bruta",
+            "Líquido",
+            "Custo",
+            "Quantidade",
+            "Margem",
+            "Ticket Médio",
+        ]
+    ]
+
+
+def preparar_tabela_resumo_fornecedor(df_resumo):
+    df_tabela = df_resumo.copy()
+
+    if df_tabela.empty:
+        return df_tabela
+
+    if "Fornecedor" in df_tabela.columns:
+        df_tabela["Fornecedor"] = df_tabela["Fornecedor"].apply(
+            lambda x: f":material/warehouse: {x}"
+        )
+
+    return df_tabela
+
+
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
 # ──────────────────────────────────────────────
@@ -2464,7 +2557,7 @@ try:
 
     else:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
-
+        
     # ──────────────────────────────────────────
     # 12.2 GRÁFICO: FATURAMENTO POR FORNECEDOR
     # ──────────────────────────────────────────
@@ -2472,33 +2565,84 @@ try:
 
     if "Fornecedor" not in df_f.columns:
         st.info("Coluna 'Fornecedor' não encontrada.")
+
     elif df_f.empty:
         st.info("Sem dados para exibir o faturamento por fornecedor.")
-    else:
-        df_fornecedor = (
-            df_f[df_f["Fornecedor"].notna() & (df_f["Fornecedor"].astype(str).str.strip() != "")]
-            .groupby("Fornecedor")["Receita_Num"].sum().reset_index()
-            .rename(columns={"Receita_Num": "Receita"})
-            .sort_values("Receita", ascending=True).head(20)
-        )
 
-        if df_fornecedor.empty:
+    else:
+        df_fornecedor_base = df_f[
+            df_f["Fornecedor"].notna() &
+            (df_f["Fornecedor"].astype(str).str.strip() != "")
+        ].copy()
+
+        if df_fornecedor_base.empty:
             st.info("Sem dados válidos de fornecedor.")
+
         else:
+            df_fornecedor = (
+                df_fornecedor_base
+                .groupby("Fornecedor", as_index=False)
+                .agg(Receita=("Receita_Num", "sum"))
+                .sort_values("Receita", ascending=False)
+                .head(20)
+            )
+
             chart_fornecedor = (
                 alt.Chart(df_fornecedor).mark_bar()
                 .encode(
-                    y=alt.Y("Fornecedor:N", title="Fornecedor", sort="-x"),
-                    x=alt.X("Receita:Q", title="R$"),
+                    y=alt.Y(
+                        "Fornecedor:N",
+                        title="Fornecedor",
+                        sort="-x"
+                    ),
+                    x=alt.X(
+                        "Receita:Q",
+                        title="R$"
+                    ),
                     tooltip=[
                         alt.Tooltip("Fornecedor:N", title="Fornecedor"),
-                        alt.Tooltip("Receita:Q",    title="R$", format=",.2f"),
+                        alt.Tooltip("Receita:Q", title="R$", format=",.2f"),
                     ],
                 )
-                .properties(height=max(320, min(900, len(df_fornecedor) * 28)))
+                .properties(
+                    height=max(320, min(900, len(df_fornecedor) * 28))
+                )
             )
-            st.altair_chart(chart_fornecedor, use_container_width=True)
 
+            aba_grafico_fornecedor, aba_detalhamento_fornecedor = st.tabs(
+                ["Gráfico", "Detalhamento"]
+            )
+
+            with aba_grafico_fornecedor:
+                st.altair_chart(
+                    chart_fornecedor,
+                    use_container_width=True
+                )
+
+                st.caption(
+                    "Top 20 fornecedores por receita no período selecionado."
+                )
+
+            with aba_detalhamento_fornecedor:
+                df_resumo_fornecedor = montar_resumo_fornecedor(df_fornecedor_base)
+
+                df_resumo_fornecedor_tabela = preparar_tabela_resumo_fornecedor(
+                    df_resumo_fornecedor
+                )
+
+                if df_resumo_fornecedor_tabela.empty:
+                    st.info("Sem dados para montar o detalhamento por fornecedor.")
+
+                else:
+                    st.caption(
+                        "Detalhamento por fornecedor, respeitando os filtros aplicados no dashboard."
+                    )
+
+                    st.table(
+                        df_resumo_fornecedor_tabela,
+                        border="horizontal",
+                        hide_index=True
+                    )
     # ──────────────────────────────────────────
     # 13. RANKINGS
     # ──────────────────────────────────────────
