@@ -624,6 +624,89 @@ def normalizar_filial(valor):
         return ""
     return txt.zfill(5)
 
+def obter_coluna_descricao_produto(df_base):
+    if "Descrição" in df_base.columns:
+        return "Descrição"
+    if "Descricao" in df_base.columns:
+        return "Descricao"
+    if "Produto" in df_base.columns:
+        return "Produto"
+    return None
+
+
+def montar_label_produto_filtro(row):
+    codigo = normalizar_codigo(row.get("Código", ""), tamanho_min=6)
+    sku = normalizar_sku(row.get("SKU", ""))
+
+    descricao = ""
+    for col in ["Descrição", "Descricao", "Produto"]:
+        if col in row.index:
+            descricao = str(row.get(col, "") or "").strip()
+            break
+
+    partes = []
+
+    if codigo:
+        partes.append(codigo)
+
+    if descricao:
+        if partes:
+            texto = f"{partes[0]} - {descricao}"
+        else:
+            texto = descricao
+    else:
+        texto = codigo or sku or "Produto não identificado"
+
+    if sku:
+        texto = f"{texto} | SKU: {sku}"
+
+    return texto
+
+
+def montar_key_produto_filtro(row):
+    sku = normalizar_sku(row.get("SKU", ""))
+    codigo = normalizar_codigo(row.get("Código", ""), tamanho_min=6)
+
+    descricao = ""
+    for col in ["Descrição", "Descricao", "Produto"]:
+        if col in row.index:
+            descricao = str(row.get(col, "") or "").strip()
+            break
+
+    if sku:
+        return f"SKU::{sku}"
+
+    if codigo:
+        return f"CODIGO::{codigo}"
+
+    return f"PRODUTO::{normalizar_texto(descricao)}"
+
+
+def montar_opcoes_produto_filtro(df_base):
+    if df_base.empty or "Produto_Filtro_Key" not in df_base.columns or "Produto_Filtro_Label" not in df_base.columns:
+        return [], {}
+
+    base = df_base[
+        df_base["Produto_Filtro_Key"].notna() &
+        (df_base["Produto_Filtro_Key"].astype(str).str.strip() != "") &
+        df_base["Produto_Filtro_Label"].notna() &
+        (df_base["Produto_Filtro_Label"].astype(str).str.strip() != "")
+    ].copy()
+
+    if base.empty:
+        return [], {}
+
+    opcoes = (
+        base[["Produto_Filtro_Key", "Produto_Filtro_Label"]]
+        .drop_duplicates(subset=["Produto_Filtro_Key"])
+        .sort_values("Produto_Filtro_Label")
+    )
+
+    keys = opcoes["Produto_Filtro_Key"].tolist()
+    labels = dict(zip(opcoes["Produto_Filtro_Key"], opcoes["Produto_Filtro_Label"]))
+
+    return keys, labels
+
 def extrair_cor3(valor):
     if pd.isna(valor):
         return ""
@@ -1332,8 +1415,9 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
 
 def aplicar_filtros_dimensionais(
     df_base, marketplaces_sel, filiais_sel, tipos_pedido_sel,
-    marcas_sel, categorias_sel, fornecedores_sel,
+    marcas_sel, categorias_sel, produtos_sel, fornecedores_sel,
     incluir_devolucao, somente_fulfillment
+):
 ):
     if incluir_devolucao:
         df_out = df_base[df_base["Eh_Devolucao"]].copy()
@@ -1354,6 +1438,8 @@ def aplicar_filtros_dimensionais(
         df_out = df_out[df_out["Marca"].isin(marcas_sel)]
     if categorias_sel and "Categoria" in df_out.columns:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
+    if produtos_sel and "Produto_Filtro_Key" in df_out.columns:
+        df_out = df_out[df_out["Produto_Filtro_Key"].isin(produtos_sel)]
     if fornecedores_sel and "Fornecedor" in df_out.columns:
         df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
@@ -1419,7 +1505,7 @@ def multiselect_dinamico(label, options, key, placeholder):
 def aplicar_filtros_para_opcoes(
     df_base, data_ini=None, data_fim=None,
     marketplaces_sel=None, filiais_sel=None, tipos_pedido_sel=None,
-    marcas_sel=None, categorias_sel=None, fornecedores_sel=None,
+    marcas_sel=None, categorias_sel=None, produtos_sel=None, fornecedores_sel=None,
     incluir_devolucao=False, somente_fulfillment=False, ignorar=None,
 ):
     ignorar = set(ignorar or [])
@@ -1428,6 +1514,7 @@ def aplicar_filtros_para_opcoes(
     tipos_pedido_sel  = tipos_pedido_sel  or []
     marcas_sel        = marcas_sel        or []
     categorias_sel    = categorias_sel    or []
+    produtos_sel      = produtos_sel      or []
     fornecedores_sel  = fornecedores_sel  or []
 
     df_out = df_base.copy()
@@ -1458,7 +1545,10 @@ def aplicar_filtros_para_opcoes(
 
     if "categoria" not in ignorar and categorias_sel and "Categoria" in df_out.columns:
         df_out = df_out[df_out["Categoria"].isin(categorias_sel)]
-
+        
+    if "produto" not in ignorar and produtos_sel and "Produto_Filtro_Key" in df_out.columns:
+        df_out = df_out[df_out["Produto_Filtro_Key"].isin(produtos_sel)]
+        
     if "fornecedor" not in ignorar and fornecedores_sel and "Fornecedor" in df_out.columns:
         df_out = df_out[df_out["Fornecedor"].isin(fornecedores_sel)]
 
@@ -1471,6 +1561,13 @@ def carregar_e_tratar_dados(_conn, url_planilha):
 
     if "SKU" in df_base.columns:
         df_base["SKU"] = df_base["SKU"].apply(normalizar_sku)
+
+    if "Código" in df_base.columns or "Produto" in df_base.columns or "Descrição" in df_base.columns or "Descricao" in df_base.columns or "SKU" in df_base.columns:
+        df_base["Produto_Filtro_Key"] = df_base.apply(montar_key_produto_filtro, axis=1)
+        df_base["Produto_Filtro_Label"] = df_base.apply(montar_label_produto_filtro, axis=1)
+    else:
+        df_base["Produto_Filtro_Key"] = ""
+        df_base["Produto_Filtro_Label"] = ""
 
     if "Filial" in df_base.columns:
         df_base["Filial_Filtro"] = df_base["Filial"].apply(normalizar_filial)
@@ -1860,6 +1957,7 @@ try:
     tipo_pedido_atual      = st.session_state.get("filtro_tipo_pedido",          [])
     marca_atual            = st.session_state.get("filtro_marca",                [])
     categoria_atual        = st.session_state.get("filtro_categoria",            [])
+    produto_atual          = st.session_state.get("filtro_produto",              [])
     fornecedor_atual       = st.session_state.get("filtro_fornecedor",           [])
     somente_fulfillment_atual = bool(st.session_state.get("filtro_somente_fulfillment", False))
     incluir_devolucao_atual   = bool(st.session_state.get("filtro_somente_devolucao",  False))
@@ -1875,6 +1973,7 @@ try:
             tipos_pedido_sel=tipo_pedido_atual,
             marcas_sel=marca_atual,
             categorias_sel=categoria_atual,
+            produtos_sel=produto_atual,
             fornecedores_sel=fornecedor_atual,
             incluir_devolucao=incluir_devolucao_atual,
             somente_fulfillment=somente_fulfillment_atual,
@@ -1903,6 +2002,20 @@ try:
     categoria_lista = opcoes_unicas(base_para_opcoes(["categoria"]), "Categoria")
     categoria_sel   = multiselect_dinamico("Categoria", options=categoria_lista, key="filtro_categoria", placeholder="Todas as categorias")
 
+    produto_keys, produto_labels = montar_opcoes_produto_filtro(
+        base_para_opcoes(["produto"])
+    )
+
+    limpar_multiselect_invalido("filtro_produto", produto_keys)
+
+    produto_sel = st.sidebar.multiselect(
+        "Produto",
+        options=produto_keys,
+        key="filtro_produto",
+        placeholder="Todos os produtos",
+        format_func=lambda key: produto_labels.get(key, key),
+    )
+    
     fornecedor_lista = opcoes_unicas(base_para_opcoes(["fornecedor"]), "Fornecedor")
     fornecedor_sel   = multiselect_dinamico("Fornecedor", options=fornecedor_lista, key="filtro_fornecedor", placeholder="Todos os fornecedores")
 
@@ -1960,6 +2073,7 @@ try:
         tipos_pedido_sel=tipo_pedido_sel,
         marcas_sel=marca_sel,
         categorias_sel=categoria_sel,
+        produtos_sel=produto_sel,
         fornecedores_sel=fornecedor_sel,
         incluir_devolucao=incluir_devolucao,
         somente_fulfillment=somente_fulfillment,
