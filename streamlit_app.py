@@ -927,7 +927,7 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     cor_linha_atual = "#4aa065"
     cor_area_atual = "#4aa065"
 
-    cor_linha_anterior = "#926c05"
+    cor_linha_anterior = "#ffc857"
     cor_area_anterior = "#ffffe7"
 
     cinza_eixo = "#64748b"
