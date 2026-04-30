@@ -1684,7 +1684,7 @@ def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marke
         .configure_view(
             strokeWidth=0
         )
-
+    )
     return base
 
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
