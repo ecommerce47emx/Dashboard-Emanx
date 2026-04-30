@@ -1876,20 +1876,51 @@ try:
             modo_periodo=periodo_rapido,
         )
 
-        df_resumo_periodos       = montar_resumo_periodos_grafico(df_f, df_prev, data_ini, data_fim, ini_ant, fim_ant)
-        df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(df_resumo_periodos)
-
-        st.markdown("##### Resumo dos períodos")
-        st.table(df_resumo_periodos_tabela, border="horizontal", hide_index=True)
-
-        # ── use_container_width=True (corrige width="stretch" inválido) ──
-        st.altair_chart(criar_grafico_comparativo(df_cmp), use_container_width=True)
-
-        st.caption(
-            f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
-            f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
-            f"Comparação alinhada pelo dia dentro do período"
+        df_resumo_periodos = montar_resumo_periodos_grafico(
+            df_f,
+            df_prev,
+            data_ini,
+            data_fim,
+            ini_ant,
+            fim_ant
         )
+
+        df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(
+            df_resumo_periodos
+        )
+
+        aba_grafico, aba_detalhamento = st.tabs(["Gráfico", "Detalhamento"])
+
+        with aba_grafico:
+            st.altair_chart(
+                criar_grafico_comparativo(df_cmp),
+                use_container_width=True
+            )
+
+            st.caption(
+                f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
+                f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
+                f"Comparação alinhada pelo dia dentro do período"
+            )
+
+        with aba_detalhamento:
+            st.caption(
+                "Resumo comparativo entre o período atual e o período anterior usado no gráfico."
+            )
+
+            st.table(
+                df_resumo_periodos_tabela,
+                border="horizontal",
+                hide_index=True
+            )
+
+            with st.expander("Ver intervalos comparados"):
+                st.dataframe(
+                    df_resumo_periodos[["Período", "Intervalo"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
     else:
         st.info("Sem dados de Data da Venda disponíveis para o período selecionado.")
 
