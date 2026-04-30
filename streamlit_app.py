@@ -923,18 +923,23 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     df_plot = df_cmp.copy()
 
     ordem_series = ["Período Atual", "Período Anterior"]
+
+    cor_atual_linha = "#4aa065"
+    cor_atual_fundo = "#4aa065"
+
+    cor_anterior_linha = "#926c05"
+    cor_anterior_fundo = "#ffffe7"
+
     df_plot["Serie"] = pd.Categorical(
         df_plot["Serie"],
         categories=ordem_series,
         ordered=True
     )
-    df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
     dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
 
-    return (
+    base = (
         alt.Chart(df_plot)
-        .mark_line(point=True, strokeWidth=3)
         .encode(
             x=alt.X(
                 "Posicao_Label:O",
@@ -949,20 +954,6 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
                     nice=False
                 )
             ),
-            color=alt.Color(
-                "Serie:N",
-                title="Série",
-                scale=alt.Scale(
-                    domain=ordem_series,
-                    range=["#4aa065", "#96cfa8"]
-                ),
-                legend=alt.Legend(
-                    orient="top",
-                    direction="horizontal"
-                )
-            ),
-            order=alt.Order("Ordem_Serie:Q", sort="ascending"),
-            detail="Serie:N",
             tooltip=[
                 alt.Tooltip("Serie:N", title="Série"),
                 alt.Tooltip("Posicao_Dia:Q", title="Posição"),
@@ -971,6 +962,97 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
             ],
         )
         .properties(height=380)
+    )
+
+    area_anterior = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Anterior")
+        .mark_area(
+            color=cor_anterior_fundo,
+            opacity=0.85,
+            interpolate="monotone"
+        )
+    )
+
+    area_atual = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Atual")
+        .mark_area(
+            color=cor_atual_fundo,
+            opacity=0.16,
+            interpolate="monotone"
+        )
+    )
+
+    linha_anterior = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Anterior")
+        .mark_line(
+            color=cor_anterior_linha,
+            strokeWidth=3,
+            interpolate="monotone"
+        )
+    )
+
+    pontos_anterior = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Anterior")
+        .mark_point(
+            color=cor_anterior_linha,
+            filled=True,
+            size=50,
+            opacity=0.9
+        )
+    )
+
+    linha_atual = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Atual")
+        .mark_line(
+            color=cor_atual_linha,
+            strokeWidth=3.5,
+            interpolate="monotone"
+        )
+    )
+
+    pontos_atual = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Atual")
+        .mark_point(
+            color=cor_atual_linha,
+            filled=True,
+            size=60,
+            opacity=1
+        )
+    )
+
+    legenda = (
+        base
+        .mark_point(opacity=0)
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                title="Série",
+                scale=alt.Scale(
+                    domain=ordem_series,
+                    range=[cor_atual_linha, cor_anterior_linha]
+                ),
+                legend=alt.Legend(
+                    orient="top",
+                    direction="horizontal"
+                )
+            )
+        )
+    )
+
+    return alt.layer(
+        area_anterior,
+        area_atual,
+        linha_anterior,
+        pontos_anterior,
+        linha_atual,
+        pontos_atual,
+        legenda
     )
 
 def montar_df_lotes_complementar(df_base, data_ini, data_fim):
