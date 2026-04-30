@@ -1575,14 +1575,39 @@ def preparar_tabela_resumo_periodos(df_resumo):
     def formatar_variacao_markdown(valor):
         texto = str(valor).strip()
 
-        if texto.startswith("+") or texto == "Novo":
-            return f":green[{texto}]"
-        elif texto.startswith("-"):
-            return f":red[{texto}]"
-        else:
-            return f":gray[{texto}]"
+        if texto == "Novo":
+            return f":green[▲ {texto}]"
 
-    mask_variacao = df_tabela["Período"].astype(str).str.strip() == "Variação"
+        if texto.startswith("+"):
+            return f":green[▲ {texto}]"
+
+        if texto.startswith("-"):
+            return f":red[▼ {texto}]"
+
+        return f":gray[▬ {texto}]"
+
+    def formatar_periodo_visual(valor):
+        texto = str(valor).strip()
+
+        if texto == "Período Atual":
+            return ":material/trending_up: **Período Atual**"
+
+        if texto == "Período Anterior":
+            return ":material/history: Período Anterior"
+
+        if texto == "Variação":
+            return ":material/percent: Variação"
+
+        return texto
+
+    df_tabela["Período"] = df_tabela["Período"].apply(formatar_periodo_visual)
+
+    mask_variacao = (
+        df_resumo["Período"]
+        .astype(str)
+        .str.strip()
+        .eq("Variação")
+    )
 
     for coluna in df_tabela.columns:
         if coluna == "Período":
@@ -2373,6 +2398,8 @@ try:
         df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(
             df_resumo_periodos
         )
+        
+        st.markdown("##### Resumo dos períodos")
         
         st.table(
             df_resumo_periodos_tabela,
