@@ -1575,6 +1575,119 @@ def criar_grafico_marketplace_por_dia(df_plot: pd.DataFrame, ordem_marketplace):
         )
     )
 
+def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marketplace):
+    if df_plot.empty:
+        return None
+
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+
+    df_plot = df_plot.copy()
+
+    marketplaces_extras = [
+        mkt for mkt in ordem_marketplace
+        if mkt not in MARKETPLACE_ORDEM_CORES
+    ]
+
+    dominio_cores = MARKETPLACE_ORDEM_CORES + marketplaces_extras
+
+    cores_extras = [
+        "#0f766e",
+        "#a16207",
+        "#be123c",
+        "#4338ca",
+        "#0369a1",
+        "#7c2d12",
+    ]
+
+    faixa_cores = MARKETPLACE_CORES + cores_extras
+
+    qtd_dias = df_plot["Data_Emissao_Filtro"].nunique()
+    angulo_x = -35 if qtd_dias > 22 else 0
+
+    base = (
+        alt.Chart(df_plot)
+        .mark_line(
+            point=True,
+            strokeWidth=2.4,
+            interpolate="monotone"
+        )
+        .encode(
+            x=alt.X(
+                "Data_Emissao_Filtro:T",
+                title="Dia",
+                axis=alt.Axis(
+                    format="%d/%m",
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    labelAngle=angulo_x,
+                    labelPadding=8,
+                    titlePadding=12,
+                    labelOverlap=True,
+                )
+            ),
+            y=alt.Y(
+                "Receita:Q",
+                title="Receita (R$)",
+                scale=alt.Scale(
+                    zero=False,
+                    nice=True
+                ),
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    gridColor="rgba(148,163,184,0.18)",
+                    labelPadding=6,
+                    titlePadding=10,
+                )
+            ),
+            color=alt.Color(
+                "Grupo de Marketplace:N",
+                title="Marketplace",
+                scale=alt.Scale(
+                    domain=dominio_cores,
+                    range=faixa_cores
+                ),
+                legend=None
+            ),
+            tooltip=[
+                alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
+                alt.Tooltip("Data_Emissao_Filtro:T", title="Data", format="%d/%m/%Y"),
+                alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
+            ],
+        )
+        .properties(
+            width=280,
+            height=170
+        )
+        .facet(
+            facet=alt.Facet(
+                "Grupo de Marketplace:N",
+                title=None,
+                sort=ordem_marketplace,
+                header=alt.Header(
+                    labelColor=cinza_eixo,
+                    labelFontSize=13,
+                    labelFontWeight="bold"
+                )
+            ),
+            columns=2
+        )
+        .resolve_scale(
+            y="independent"
+        )
+        .configure_view(
+            strokeWidth=0
+        )
+    )
+
+    return base
+
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
         return df_base.iloc[0:0].copy()
@@ -2919,13 +3032,34 @@ try:
             )
 
             if chart_mkt_dia is not None:
-                st.altair_chart(chart_mkt_dia, width="stretch")
-
-                st.caption(
-                    f"Receita diária por marketplace entre "
-                    f"{data_ini.strftime('%d/%m/%Y')} e {data_fim.strftime('%d/%m/%Y')}. "
-                    f"As cores seguem a mesma escala definida para o gráfico de marketplace."
-                )
+                aba_geral, aba_individual = st.tabs([
+                    "Visão geral",
+                    "Visão por marketplace"
+                ])
+            
+                with aba_geral:
+                    st.altair_chart(chart_mkt_dia, width="stretch")
+            
+                    st.caption(
+                        f"Receita diária por marketplace entre "
+                        f"{data_ini.strftime('%d/%m/%Y')} e {data_fim.strftime('%d/%m/%Y')}. "
+                        f"Esta visão preserva a comparação absoluta entre marketplaces."
+                    )
+            
+                with aba_individual:
+                    chart_mkt_facetas = criar_grafico_marketplace_por_dia_facetas(
+                        df_mkt_dia,
+                        ordem_mkt_dia
+                    )
+            
+                    if chart_mkt_facetas is not None:
+                        st.altair_chart(chart_mkt_facetas, width="stretch")
+            
+                        st.caption(
+                            "Cada marketplace usa uma escala própria no eixo Y. "
+                            "Essa visão facilita enxergar a variação diária dos marketplaces menores, "
+                            "mas não deve ser usada para comparar volumes absolutos entre eles."
+                        )
         else:
             st.info("Sem dados para exibir a receita por marketplace por dia.")
     else:
