@@ -2344,7 +2344,7 @@ try:
         )
         
         try:
-            altura_resumo_periodos = 39 + (len(df_resumo_periodos_visivel) * 34)
+            altura_resumo_periodos = 40 + (len(df_resumo_periodos_visivel) * 34)
             
             st.dataframe(
                 df_resumo_periodos_visivel.style.apply(estilizar_variacao_resumo, axis=1),
