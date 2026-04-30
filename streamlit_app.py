@@ -999,69 +999,105 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
         .configure_view(strokeWidth=0)
     )
 
-def montar_resumo_lotes_novos_grafico(df_lotes_comp, data_ini, data_fim):
-    if df_lotes_comp.empty:
+def montar_resumo_lotes_novos_grafico(df_base, data_ini, data_fim):
+    if df_base.empty:
         return pd.DataFrame()
 
-    base = df_lotes_comp.copy()
-    base["Valor"] = pd.to_numeric(base["Valor"], errors="coerce").fillna(0)
+    base = df_base.copy()
 
-    intervalo = (
-        f"{pd.Timestamp(data_ini).strftime('%d/%m/%Y')} até "
-        f"{pd.Timestamp(data_fim).strftime('%d/%m/%Y')}"
-    )
+    if "Dia_Grafico" not in base.columns:
+        return pd.DataFrame()
+
+    base = base[base["Dia_Grafico"].notna()].copy()
+    base = filtrar_intervalo(base, "Dia_Grafico", data_ini, data_fim)
+
+    if base.empty:
+        return pd.DataFrame()
+
+    if "Fornecedor" in base.columns:
+        base["Serie_Resumo"] = base["Fornecedor"].apply(
+            lambda x: "Lotes" if normalizar_texto(x) == "LOTES" else "Novos"
+        )
+    else:
+        base["Serie_Resumo"] = "Novos"
 
     resumo = (
-        base.groupby("Serie", as_index=False)
+        base.groupby("Serie_Resumo", as_index=False)
         .agg(
-            Receita_Total=("Valor", "sum"),
-            Media_Diaria=("Valor", "mean"),
-            Maior_Dia=("Valor", "max"),
-            Dias_Com_Receita=("Valor", lambda x: int((x > 0).sum())),
+            Receita=("Receita_Num", "sum"),
+            Liquido=("Liquido_Num", "sum"),
+            Custo=("Custo_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
         )
     )
 
-    maior_dia = (
-        base.sort_values(["Serie", "Valor", "Data_Original"], ascending=[True, False, True])
-        .drop_duplicates(subset=["Serie"], keep="first")
-        [["Serie", "Data_Original"]]
-        .rename(columns={"Data_Original": "Data_Maior_Dia"})
+    if resumo.empty:
+        return pd.DataFrame()
+
+    total_receita = float(resumo["Receita"].sum())
+
+    resumo["Margem_Pct"] = resumo.apply(
+        lambda row: calcular_margem_pct(row["Liquido"], row["Custo"]),
+        axis=1
     )
 
-    resumo = resumo.merge(maior_dia, on="Serie", how="left")
+    resumo["Ticket_Medio"] = resumo.apply(
+        lambda row: (row["Receita"] / row["Quantidade"]) if row["Quantidade"] > 0 else 0.0,
+        axis=1
+    )
 
-    ordem_series = ["Receita Novos", "Receita Lotes"]
-    resumo["Serie"] = pd.Categorical(
-        resumo["Serie"],
-        categories=ordem_series,
+    resumo["Percentual_Total"] = resumo["Receita"].apply(
+        lambda x: (x / total_receita) if total_receita > 0 else 0.0
+    )
+
+    ordem = ["Novos", "Lotes"]
+    resumo["Serie_Resumo"] = pd.Categorical(
+        resumo["Serie_Resumo"],
+        categories=ordem,
         ordered=True
     )
+    resumo = resumo.sort_values("Serie_Resumo").reset_index(drop=True)
 
-    resumo = resumo.sort_values("Serie").reset_index(drop=True)
-
-    resumo["Intervalo"] = intervalo
-    resumo["Receita Total"] = resumo["Receita_Total"].apply(formatar_brl)
-    resumo["Média Diária"] = resumo["Media_Diaria"].apply(formatar_brl)
-    resumo["Maior Dia"] = resumo["Maior_Dia"].apply(formatar_brl)
-    resumo["Data do Maior Dia"] = resumo["Data_Maior_Dia"].apply(
-        lambda x: pd.Timestamp(x).strftime("%d/%m/%Y") if pd.notna(x) else ""
-    )
-    resumo["Dias com Receita"] = resumo["Dias_Com_Receita"].apply(formatar_int)
-
-    resumo = resumo.rename(columns={"Serie": "Série"})
+    resumo["Série"] = resumo["Serie_Resumo"]
+    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
+    resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
+    resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
+    resumo["Quantidade"] = resumo["Quantidade"].apply(formatar_int)
+    resumo["Margem"] = resumo["Margem_Pct"].apply(formatar_pct)
+    resumo["Ticket Médio"] = resumo["Ticket_Medio"].apply(formatar_brl)
 
     return resumo[
         [
             "Série",
-            "Intervalo",
-            "Receita Total",
-            "Média Diária",
-            "Maior Dia",
-            "Data do Maior Dia",
-            "Dias com Receita",
+            "Percentual do Total",
+            "Receita Bruta",
+            "Líquido",
+            "Custo",
+            "Quantidade",
+            "Margem",
+            "Ticket Médio",
         ]
     ]
 
+
+def preparar_tabela_resumo_lotes_novos(df_resumo):
+    df_tabela = df_resumo.copy()
+
+    if df_tabela.empty or "Série" not in df_tabela.columns:
+        return df_tabela
+
+    def fmt_serie(valor):
+        txt = str(valor).strip()
+        if txt == "Novos":
+            return "🆕 Novos"
+        if txt == "Lotes":
+            return "📦 Lotes"
+        return txt
+
+    df_tabela["Série"] = df_tabela["Série"].apply(fmt_serie)
+
+    return df_tabela
 # ──────────────────────────────────────────────
 # GRÁFICO: RECEITA POR MARKETPLACE POR DIA
 # ──────────────────────────────────────────────
@@ -2000,11 +2036,7 @@ try:
         "Dia_Grafico" in df_grafico_base.columns and
         df_grafico_base["Dia_Grafico"].notna().any()
     ):
-        df_lotes_comp = montar_df_lotes_complementar(
-            df_grafico_base,
-            data_ini,
-            data_fim
-        )
+        df_lotes_comp = montar_df_lotes_complementar(df_grafico_base, data_ini, data_fim)
 
         if not df_lotes_comp.empty:
             aba_grafico_lotes, aba_detalhamento_lotes = st.tabs(
@@ -2024,17 +2056,21 @@ try:
 
             with aba_detalhamento_lotes:
                 df_resumo_lotes_novos = montar_resumo_lotes_novos_grafico(
-                    df_lotes_comp,
+                    df_grafico_base,
                     data_ini,
                     data_fim
                 )
 
+                df_resumo_lotes_novos_tabela = preparar_tabela_resumo_lotes_novos(
+                    df_resumo_lotes_novos
+                )
+
                 st.caption(
-                    "Resumo das receitas de Novos e Lotes no período selecionado, sem cálculo de variação percentual."
+                    "Resumo comparativo entre Novos e Lotes no período selecionado."
                 )
 
                 st.table(
-                    df_resumo_lotes_novos,
+                    df_resumo_lotes_novos_tabela,
                     border="horizontal",
                     hide_index=True
                 )
