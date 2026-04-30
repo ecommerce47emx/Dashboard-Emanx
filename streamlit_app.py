@@ -1007,7 +1007,7 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
         .transform_filter(alt.datum.Serie == "Período Anterior")
         .mark_area(
             color=cor_area_anterior,
-            opacity=0.72,
+            opacity=0.14,
             interpolate="monotone"
         )
         .encode(
