@@ -1563,6 +1563,38 @@ def montar_resumo_periodos_grafico(
 
     return df_resumo
 
+def preparar_tabela_resumo_periodos(df_resumo):
+    df_tabela = df_resumo.drop(
+        columns=["Intervalo"],
+        errors="ignore"
+    ).copy()
+
+    if df_tabela.empty or "Período" not in df_tabela.columns:
+        return df_tabela
+
+    def formatar_variacao_markdown(valor):
+        texto = str(valor).strip()
+
+        if texto.startswith("+") or texto == "Novo":
+            return f":green[{texto}]"
+        elif texto.startswith("-"):
+            return f":red[{texto}]"
+        else:
+            return f":gray[{texto}]"
+
+    mask_variacao = df_tabela["Período"].astype(str).str.strip() == "Variação"
+
+    for coluna in df_tabela.columns:
+        if coluna == "Período":
+            continue
+
+        df_tabela.loc[mask_variacao, coluna] = (
+            df_tabela.loc[mask_variacao, coluna]
+            .apply(formatar_variacao_markdown)
+        )
+
+    return df_tabela
+
 def estilizar_variacao_resumo(row):
     estilos = []
 
@@ -2338,28 +2370,15 @@ try:
             fim_ant=fim_ant_chart,
         )
         
-        df_resumo_periodos_visivel = df_resumo_periodos.drop(
-            columns=["Intervalo"],
-            errors="ignore"
+        df_resumo_periodos_tabela = preparar_tabela_resumo_periodos(
+            df_resumo_periodos
         )
         
-        try:
-            altura_resumo_periodos = 40 + (len(df_resumo_periodos_visivel) * 34)
-            
-            st.dataframe(
-                df_resumo_periodos_visivel.style.apply(estilizar_variacao_resumo, axis=1),
-                hide_index=True,
-                width="stretch",
-                height=altura_resumo_periodos
-            )
-        except Exception as e:
-            st.warning(f"Não foi possível aplicar a estilização da tabela: {e}")
-            st.dataframe(
-                df_resumo_periodos_visivel,
-                hide_index=True,
-                width="stretch",
-                height=altura_resumo_periodos
-            )
+        st.table(
+            df_resumo_periodos_tabela,
+            border="horizontal",
+            hide_index=True
+        )
         
         chart = criar_grafico_comparativo(df_cmp)
         
