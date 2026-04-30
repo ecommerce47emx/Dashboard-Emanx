@@ -924,58 +924,94 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
 
     ordem_series = ["Período Atual", "Período Anterior"]
 
-    cor_atual = "#4aa065"
-    cor_anterior = "#ffffe7"
+    cor_linha_atual = "#4aa065"
+    cor_area_atual = "#4aa065"
+
+    cor_linha_anterior = "#926c05"
+    cor_area_anterior = "#ffffe7"
+
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
 
     df_plot["Serie"] = pd.Categorical(
         df_plot["Serie"],
         categories=ordem_series,
         ordered=True
     )
+
     df_plot["Ordem_Serie"] = df_plot["Serie"].cat.codes
 
     dominio_y = calcular_dominio_y_grafico(df_plot, "Valor")
+    df_plot["Baseline_Y"] = dominio_y[0]
 
-    base = alt.Chart(df_plot).encode(
-        x=alt.X(
-            "Posicao_Label:O",
-            title="Dia dentro do período"
-        ),
-        y=alt.Y(
-            "Valor:Q",
-            title="Receita (R$)",
-            scale=alt.Scale(
-                domain=dominio_y,
-                zero=False,
-                nice=False
-            )
-        ),
-        tooltip=[
-            alt.Tooltip("Serie:N", title="Série"),
-            alt.Tooltip("Posicao_Dia:Q", title="Posição"),
-            alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
-            alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
-        ],
+    qtd_dias = df_plot["Posicao_Label"].nunique()
+    angulo_x = -35 if qtd_dias > 22 else 0
+
+    escala_cores_linha = alt.Scale(
+        domain=ordem_series,
+        range=[cor_linha_atual, cor_linha_anterior]
+    )
+
+    legenda_series = alt.Legend(
+        orient="top",
+        direction="horizontal",
+        title="Série"
+    )
+
+    base = (
+        alt.Chart(df_plot)
+        .encode(
+            x=alt.X(
+                "Posicao_Label:O",
+                title="Dia dentro do período",
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    labelAngle=angulo_x,
+                    labelPadding=10,
+                    titlePadding=18,
+                    labelOverlap=True,
+                )
+            ),
+            y=alt.Y(
+                "Valor:Q",
+                title="Receita (R$)",
+                scale=alt.Scale(
+                    domain=dominio_y,
+                    zero=False,
+                    nice=False
+                ),
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    gridColor="rgba(148,163,184,0.18)",
+                    labelPadding=8,
+                    titlePadding=12,
+                )
+            ),
+            tooltip=[
+                alt.Tooltip("Serie:N", title="Série"),
+                alt.Tooltip("Posicao_Dia:Q", title="Posição"),
+                alt.Tooltip("Data_Original:T", title="Data original", format="%d/%m/%Y"),
+                alt.Tooltip("Valor:Q", title="Receita", format=",.2f"),
+            ],
+        )
     )
 
     area_anterior = (
         base
         .transform_filter(alt.datum.Serie == "Período Anterior")
         .mark_area(
-            opacity=0.75,
-            color=cor_anterior,
+            color=cor_area_anterior,
+            opacity=0.72,
             interpolate="monotone"
         )
-    )
-
-    linha_anterior = (
-        base
-        .transform_filter(alt.datum.Serie == "Período Anterior")
-        .mark_line(
-            point=True,
-            strokeWidth=3,
-            color=cor_anterior,
-            interpolate="monotone"
+        .encode(
+            y2=alt.Y2("Baseline_Y:Q")
         )
     )
 
@@ -983,9 +1019,46 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
         base
         .transform_filter(alt.datum.Serie == "Período Atual")
         .mark_area(
-            opacity=0.18,
-            color=cor_atual,
+            color=cor_area_atual,
+            opacity=0.14,
             interpolate="monotone"
+        )
+        .encode(
+            y2=alt.Y2("Baseline_Y:Q")
+        )
+    )
+
+    linha_anterior = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Anterior")
+        .mark_line(
+            strokeWidth=2.6,
+            interpolate="monotone"
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    pontos_anterior = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Anterior")
+        .mark_circle(
+            size=42,
+            opacity=0.95,
+            stroke="white",
+            strokeWidth=1
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
         )
     )
 
@@ -993,28 +1066,32 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
         base
         .transform_filter(alt.datum.Serie == "Período Atual")
         .mark_line(
-            point=True,
-            strokeWidth=3,
-            color=cor_atual,
+            strokeWidth=3.3,
             interpolate="monotone"
         )
-    )
-
-    legenda = (
-        alt.Chart(df_plot)
-        .mark_point(opacity=0)
         .encode(
             color=alt.Color(
                 "Serie:N",
-                title="Série",
-                scale=alt.Scale(
-                    domain=ordem_series,
-                    range=[cor_atual, cor_anterior]
-                ),
-                legend=alt.Legend(
-                    orient="top",
-                    direction="horizontal"
-                )
+                scale=escala_cores_linha,
+                legend=legenda_series
+            )
+        )
+    )
+
+    pontos_atual = (
+        base
+        .transform_filter(alt.datum.Serie == "Período Atual")
+        .mark_circle(
+            size=52,
+            opacity=0.95,
+            stroke="white",
+            strokeWidth=1
+        )
+        .encode(
+            color=alt.Color(
+                "Serie:N",
+                scale=escala_cores_linha,
+                legend=legenda_series
             )
         )
     )
@@ -1022,25 +1099,28 @@ def criar_grafico_comparativo(df_cmp: pd.DataFrame):
     return (
         alt.layer(
             area_anterior,
-            linha_anterior,
             area_atual,
+            linha_anterior,
+            pontos_anterior,
             linha_atual,
-            legenda
+            pontos_atual,
         )
-        .properties(height=380)
-        .resolve_scale(color="independent")
+        .resolve_scale(
+            color="shared"
+        )
+        .properties(
+            height=380,
+            padding={
+                "top": 8,
+                "right": 12,
+                "bottom": 30,
+                "left": 8,
+            }
+        )
+        .configure_view(
+            strokeWidth=0
+        )
     )
-
-    return alt.layer(
-        area_anterior,
-        area_atual,
-        linha_anterior,
-        pontos_anterior,
-        linha_atual,
-        pontos_atual,
-        legenda
-    )
-
 def montar_df_lotes_complementar(df_base, data_ini, data_fim):
     base_valida = df_base[
         df_base["Dia_Grafico"].notna()
