@@ -1142,7 +1142,7 @@ def montar_resumo_lotes_novos_grafico(df_base, data_ini, data_fim):
     resumo = resumo.sort_values("Serie_Resumo").reset_index(drop=True)
 
     resumo["Série"] = resumo["Serie_Resumo"]
-    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["% do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
     resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
     resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
     resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
@@ -1153,7 +1153,7 @@ def montar_resumo_lotes_novos_grafico(df_base, data_ini, data_fim):
     return resumo[
         [
             "Série",
-            "Percentual do Total",
+            "% do Total",
             "Receita Bruta",
             "Líquido",
             "Custo",
@@ -1742,7 +1742,7 @@ def montar_resumo_marketplace_tipo_pedido(df_base, filtro_mkt_ativo=False):
         ).reset_index(drop=True)
 
     resumo["Marketplace"] = resumo["Grupo de Marketplace"]
-    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["% do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
     resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
     resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
     resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
@@ -1757,7 +1757,7 @@ def montar_resumo_marketplace_tipo_pedido(df_base, filtro_mkt_ativo=False):
             [
                 "Marketplace",
                 "Tipo de Pedido",
-                "Percentual do Total",
+                "% do Total",
                 "Receita Bruta",
                 "Líquido",
                 "Custo",
@@ -1770,7 +1770,7 @@ def montar_resumo_marketplace_tipo_pedido(df_base, filtro_mkt_ativo=False):
     return resumo[
         [
             "Marketplace",
-            "Percentual do Total",
+            "% do Total",
             "Receita Bruta",
             "Líquido",
             "Custo",
@@ -1856,7 +1856,7 @@ def montar_resumo_fornecedor(df_base):
         ascending=False
     ).reset_index(drop=True)
 
-    resumo["Percentual do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
+    resumo["% do Total"] = resumo["Percentual_Total"].apply(formatar_pct)
     resumo["Receita Bruta"] = resumo["Receita"].apply(formatar_brl)
     resumo["Líquido"] = resumo["Liquido"].apply(formatar_brl)
     resumo["Custo"] = resumo["Custo"].apply(formatar_brl)
@@ -1867,7 +1867,7 @@ def montar_resumo_fornecedor(df_base):
     return resumo[
         [
             "Fornecedor",
-            "Percentual do Total",
+            "% do Total",
             "Receita Bruta",
             "Líquido",
             "Custo",
