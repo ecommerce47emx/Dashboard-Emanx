@@ -1790,7 +1790,7 @@ def preparar_tabela_resumo_fornecedor(df_resumo):
 
     if "Fornecedor" in df_tabela.columns:
         df_tabela["Fornecedor"] = df_tabela["Fornecedor"].apply(
-            lambda x: f":material/warehouse: {truncar_texto(x, 25)}"
+            lambda x: f":material/warehouse: {truncar_texto(x, 23)}"
         )
 
     return df_tabela
