@@ -1662,8 +1662,8 @@ def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marke
             ],
         )
         .properties(
-            width=280,
-            height=170
+            width=520,
+            height=210
         )
         .facet(
             facet=alt.Facet(
@@ -1684,7 +1684,6 @@ def criar_grafico_marketplace_por_dia_facetas(df_plot: pd.DataFrame, ordem_marke
         .configure_view(
             strokeWidth=0
         )
-    )
 
     return base
 
