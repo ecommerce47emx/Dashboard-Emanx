@@ -1142,7 +1142,6 @@ def calcular_status_e_projecao(data_ini, data_fim, total_atual):
     }
 
 
-# ── CHANGE 1: empty filter = select all ──────────────────────────────────────
 def aplicar_filtros_dimensionais(
     df_base,
     marketplaces_sel,
@@ -1619,38 +1618,6 @@ def preparar_tabela_resumo_periodos(df_resumo):
         )
 
     return df_tabela
-
-def estilizar_variacao_resumo(row):
-    estilos = []
-
-    for coluna, valor in row.items():
-        if row.get("Período") != "Variação":
-            estilos.append("")
-            continue
-
-        if coluna == "Período":
-            estilos.append("")
-            continue
-
-        texto = str(valor).strip()
-
-        if texto.startswith("+") or texto == "Novo":
-            estilos.append(
-                "background-color:rgba(34,197,94,0.16); "
-                "color:#15803d;"
-            )
-        elif texto.startswith("-"):
-            estilos.append(
-                "background-color:rgba(239,68,68,0.16); "
-                "color:#dc2626;"
-            )
-        else:
-            estilos.append(
-                "background-color:rgba(100,116,139,0.10); "
-                "color:#475569;"
-            )
-
-    return estilos
 
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
