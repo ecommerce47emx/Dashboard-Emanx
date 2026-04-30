@@ -1376,6 +1376,205 @@ def criar_grafico_lotes_complementar(df_plot: pd.DataFrame):
         )
     )
 
+def montar_df_marketplace_por_dia(df_base, data_ini, data_fim):
+    colunas_necessarias = [
+        "Data_Emissao_Filtro",
+        "Grupo de Marketplace",
+        "Receita_Num",
+    ]
+
+    if df_base.empty or not all(col in df_base.columns for col in colunas_necessarias):
+        return pd.DataFrame(), []
+
+    base = df_base[
+        df_base["Data_Emissao_Filtro"].notna() &
+        df_base["Grupo de Marketplace"].notna() &
+        (df_base["Grupo de Marketplace"].astype(str).str.strip() != "")
+    ].copy()
+
+    if base.empty:
+        return pd.DataFrame(), []
+
+    base_periodo = filtrar_intervalo(
+        base,
+        "Data_Emissao_Filtro",
+        data_ini,
+        data_fim
+    )
+
+    if base_periodo.empty:
+        return pd.DataFrame(), []
+
+    ordem_marketplace = (
+        base_periodo.groupby("Grupo de Marketplace", as_index=False)
+        .agg(Receita_Total=("Receita_Num", "sum"))
+        .sort_values("Receita_Total", ascending=False)
+        ["Grupo de Marketplace"]
+        .tolist()
+    )
+
+    datas_periodo = pd.date_range(
+        pd.Timestamp(data_ini).normalize(),
+        pd.Timestamp(data_fim).normalize(),
+        freq="D"
+    )
+
+    df_dia = (
+        base_periodo
+        .groupby(["Data_Emissao_Filtro", "Grupo de Marketplace"], as_index=False)
+        .agg(Receita=("Receita_Num", "sum"))
+    )
+
+    idx = pd.MultiIndex.from_product(
+        [datas_periodo, ordem_marketplace],
+        names=["Data_Emissao_Filtro", "Grupo de Marketplace"]
+    )
+
+    df_plot = (
+        df_dia
+        .set_index(["Data_Emissao_Filtro", "Grupo de Marketplace"])
+        .reindex(idx, fill_value=0)
+        .reset_index()
+    )
+
+    df_plot["Receita_Total_Marketplace"] = (
+        df_plot.groupby("Grupo de Marketplace")["Receita"]
+        .transform("sum")
+    )
+
+    df_plot["Ordem_Marketplace"] = df_plot["Grupo de Marketplace"].map(
+        {mkt: i for i, mkt in enumerate(ordem_marketplace)}
+    )
+
+    return df_plot, ordem_marketplace
+
+
+def criar_grafico_marketplace_por_dia(df_plot: pd.DataFrame, ordem_marketplace):
+    if df_plot.empty:
+        return None
+
+    cinza_eixo = "#64748b"
+    cinza_grade = "#CBD5E1"
+
+    df_plot = df_plot.copy()
+
+    marketplaces_extras = [
+        mkt for mkt in ordem_marketplace
+        if mkt not in MARKETPLACE_ORDEM_CORES
+    ]
+
+    dominio_cores = MARKETPLACE_ORDEM_CORES + marketplaces_extras
+
+    cores_extras = [
+        "#0f766e",
+        "#a16207",
+        "#be123c",
+        "#4338ca",
+        "#0369a1",
+        "#7c2d12",
+    ]
+
+    faixa_cores = MARKETPLACE_CORES + cores_extras
+
+    qtd_dias = df_plot["Data_Emissao_Filtro"].nunique()
+    angulo_x = -35 if qtd_dias > 22 else 0
+
+    dominio_y = calcular_dominio_y_grafico(df_plot, "Receita")
+
+    base = (
+        alt.Chart(df_plot)
+        .encode(
+            x=alt.X(
+                "Data_Emissao_Filtro:T",
+                title="Dia",
+                axis=alt.Axis(
+                    format="%d/%m",
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    labelAngle=angulo_x,
+                    labelPadding=10,
+                    titlePadding=18,
+                    labelOverlap=True,
+                )
+            ),
+            y=alt.Y(
+                "Receita:Q",
+                title="Receita (R$)",
+                scale=alt.Scale(
+                    domain=dominio_y,
+                    zero=False,
+                    nice=False
+                ),
+                axis=alt.Axis(
+                    labelColor=cinza_eixo,
+                    titleColor=cinza_eixo,
+                    domainColor=cinza_grade,
+                    tickColor=cinza_grade,
+                    gridColor="rgba(148,163,184,0.18)",
+                    labelPadding=8,
+                    titlePadding=12,
+                )
+            ),
+            color=alt.Color(
+                "Grupo de Marketplace:N",
+                title="Marketplace",
+                scale=alt.Scale(
+                    domain=dominio_cores,
+                    range=faixa_cores
+                ),
+                legend=alt.Legend(
+                    orient="top",
+                    direction="horizontal"
+                ),
+                sort=ordem_marketplace
+            ),
+            detail="Grupo de Marketplace:N",
+            tooltip=[
+                alt.Tooltip("Grupo de Marketplace:N", title="Marketplace"),
+                alt.Tooltip("Data_Emissao_Filtro:T", title="Data", format="%d/%m/%Y"),
+                alt.Tooltip("Receita:Q", title="Receita", format=",.2f"),
+                alt.Tooltip("Receita_Total_Marketplace:Q", title="Receita Total Marketplace", format=",.2f"),
+            ],
+        )
+    )
+
+    linhas = (
+        base
+        .mark_line(
+            strokeWidth=2.7,
+            interpolate="monotone",
+            opacity=0.92
+        )
+    )
+
+    pontos = (
+        base
+        .mark_circle(
+            size=38,
+            opacity=0.88,
+            stroke="white",
+            strokeWidth=1
+        )
+    )
+
+    return (
+        alt.layer(linhas, pontos)
+        .properties(
+            height=380,
+            padding={
+                "top": 8,
+                "right": 12,
+                "bottom": 30,
+                "left": 8,
+            }
+        )
+        .configure_view(
+            strokeWidth=0
+        )
+    )
+
 def filtrar_intervalo(df_base: pd.DataFrame, coluna_data: str, ini, fim) -> pd.DataFrame:
     if coluna_data not in df_base.columns:
         return df_base.iloc[0:0].copy()
@@ -2696,7 +2895,44 @@ try:
         st.info("Sem dados válidos para exibir o gráfico de Lotes x Novos.")
 
     # ──────────────────────────────────────────
-    # 12. GRÁFICO: MARKETPLACE × TIPO PEDIDO
+    # 12. GRÁFICO: RECEITA POR MARKETPLACE POR DIA
+    # ──────────────────────────────────────────
+    st.subheader("Receita por Marketplace por Dia")
+
+    if (
+        data_ini is not None and
+        data_fim is not None and
+        not df_f.empty and
+        "Data_Emissao_Filtro" in df_f.columns and
+        "Grupo de Marketplace" in df_f.columns
+    ):
+        df_mkt_dia, ordem_mkt_dia = montar_df_marketplace_por_dia(
+            df_base=df_f,
+            data_ini=data_ini,
+            data_fim=data_fim
+        )
+
+        if not df_mkt_dia.empty:
+            chart_mkt_dia = criar_grafico_marketplace_por_dia(
+                df_mkt_dia,
+                ordem_mkt_dia
+            )
+
+            if chart_mkt_dia is not None:
+                st.altair_chart(chart_mkt_dia, width="stretch")
+
+                st.caption(
+                    f"Receita diária por marketplace entre "
+                    f"{data_ini.strftime('%d/%m/%Y')} e {data_fim.strftime('%d/%m/%Y')}. "
+                    f"As cores seguem a mesma escala definida para o gráfico de marketplace."
+                )
+        else:
+            st.info("Sem dados para exibir a receita por marketplace por dia.")
+    else:
+        st.info("Sem dados válidos para exibir a receita por marketplace por dia.")
+
+    # ──────────────────────────────────────────
+    # 12.1 GRÁFICO: MARKETPLACE × TIPO PEDIDO
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Marketplace e Tipo de Pedido")
     
@@ -2827,7 +3063,7 @@ try:
         st.info("Sem dados para exibir o faturamento por marketplace e tipo de pedido.")
 
     # ──────────────────────────────────────────
-    # 12.1 GRÁFICO: FATURAMENTO POR FORNECEDOR
+    # 12.2 GRÁFICO: FATURAMENTO POR FORNECEDOR
     # ──────────────────────────────────────────
     st.subheader("Faturamento por Fornecedor")
     
