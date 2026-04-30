@@ -1418,7 +1418,6 @@ def aplicar_filtros_dimensionais(
     marcas_sel, categorias_sel, produtos_sel, fornecedores_sel,
     incluir_devolucao, somente_fulfillment
 ):
-):
     if incluir_devolucao:
         df_out = df_base[df_base["Eh_Devolucao"]].copy()
     else:
