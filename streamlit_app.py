@@ -2034,6 +2034,18 @@ try:
         placeholder="Todos os fornecedores"
     )
 
+    mkt_lista = opcoes_unicas(
+        base_para_opcoes(["marketplace"]),
+        "Grupo de Marketplace"
+    )
+
+    mkt_sel = multiselect_dinamico(
+        "Marketplace",
+        options=mkt_lista,
+        key="filtro_marketplace",
+        placeholder="Todos os marketplaces"
+    )
+
     tipo_pedido_lista = opcoes_unicas(
         base_para_opcoes(["tipo_pedido"]),
         "Tipo pedido"
