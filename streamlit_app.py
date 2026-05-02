@@ -1980,32 +1980,85 @@ try:
         )
 
     # 6.4 FILTROS DINÂMICOS
-    mkt_lista = opcoes_unicas(base_para_opcoes(["marketplace"]), "Grupo de Marketplace")
-    mkt_sel   = multiselect_dinamico("Marketplace", options=mkt_lista, key="filtro_marketplace", placeholder="Todos os marketplaces")
+    # Marketplace não será exibido como filtro lateral nesta nova ordem.
+    # Mantém a variável definida para não quebrar os blocos que ainda usam mkt_sel.
+    mkt_sel = []
 
-    somente_fulfillment    = st.sidebar.toggle("Somente Fulfillment",     value=False, key="filtro_somente_fulfillment")
-    incluir_devolucao      = st.sidebar.toggle("Somente Devolução",       value=False, key="filtro_somente_devolucao")
-    somente_margem_negativa = st.sidebar.toggle("Somente Margem Negativa", value=False, key="filtro_somente_margem_negativa")
+    filiais_validas_base = opcoes_unicas(
+        base_para_opcoes(["filial"]),
+        "Filial_Filtro"
+    )
 
-    filiais_validas_base = opcoes_unicas(base_para_opcoes(["filial"]), "Filial_Filtro")
-    filiais_lista_base   = ["00001", "00008", "00016", "20301"]
-    filiais_lista        = [f for f in filiais_lista_base if f in filiais_validas_base]
-    filial_sel           = multiselect_dinamico("Filial", options=filiais_lista, key="filtro_filial", placeholder="Todas as filiais")
+    filiais_lista_base = ["00001", "00008", "00016", "20301"]
 
-    tipo_pedido_lista = opcoes_unicas(base_para_opcoes(["tipo_pedido"]), "Tipo pedido")
-    tipo_pedido_sel   = multiselect_dinamico("Tipo de Pedido", options=tipo_pedido_lista, key="filtro_tipo_pedido", placeholder="Todos os tipos de pedido")
+    filiais_lista = [
+        f for f in filiais_lista_base
+        if f in filiais_validas_base
+    ]
 
-    marca_lista = opcoes_unicas(base_para_opcoes(["marca"]), "Marca")
-    marca_sel   = multiselect_dinamico("Marca", options=marca_lista, key="filtro_marca", placeholder="Todas as marcas")
+    filial_sel = multiselect_dinamico(
+        "Filial",
+        options=filiais_lista,
+        key="filtro_filial",
+        placeholder="Todas as filiais"
+    )
 
-    categoria_lista = opcoes_unicas(base_para_opcoes(["categoria"]), "Categoria")
-    categoria_sel   = multiselect_dinamico("Categoria", options=categoria_lista, key="filtro_categoria", placeholder="Todas as categorias")
+    fornecedor_lista = opcoes_unicas(
+        base_para_opcoes(["fornecedor"]),
+        "Fornecedor"
+    )
+
+    fornecedor_sel = multiselect_dinamico(
+        "Fornecedor",
+        options=fornecedor_lista,
+        key="filtro_fornecedor",
+        placeholder="Todos os fornecedores"
+    )
+
+    tipo_pedido_lista = opcoes_unicas(
+        base_para_opcoes(["tipo_pedido"]),
+        "Tipo pedido"
+    )
+
+    tipo_pedido_sel = multiselect_dinamico(
+        "Tipo de Pedido",
+        options=tipo_pedido_lista,
+        key="filtro_tipo_pedido",
+        placeholder="Todos os tipos de pedido"
+    )
+
+    marca_lista = opcoes_unicas(
+        base_para_opcoes(["marca"]),
+        "Marca"
+    )
+
+    marca_sel = multiselect_dinamico(
+        "Marca",
+        options=marca_lista,
+        key="filtro_marca",
+        placeholder="Todas as marcas"
+    )
+
+    categoria_lista = opcoes_unicas(
+        base_para_opcoes(["categoria"]),
+        "Categoria"
+    )
+
+    categoria_sel = multiselect_dinamico(
+        "Categoria",
+        options=categoria_lista,
+        key="filtro_categoria",
+        placeholder="Todas as categorias"
+    )
 
     produto_keys, produto_labels = montar_opcoes_produto_filtro(
         base_para_opcoes(["produto"])
     )
 
-    limpar_multiselect_invalido("filtro_produto", produto_keys)
+    limpar_multiselect_invalido(
+        "filtro_produto",
+        produto_keys
+    )
 
     produto_sel = st.sidebar.multiselect(
         "Produto",
@@ -2014,10 +2067,24 @@ try:
         placeholder="Todos os produtos",
         format_func=lambda key: produto_labels.get(key, key),
     )
-    
-    fornecedor_lista = opcoes_unicas(base_para_opcoes(["fornecedor"]), "Fornecedor")
-    fornecedor_sel   = multiselect_dinamico("Fornecedor", options=fornecedor_lista, key="filtro_fornecedor", placeholder="Todos os fornecedores")
 
+    somente_fulfillment = st.sidebar.toggle(
+        "Somente Fulfillment",
+        value=False,
+        key="filtro_somente_fulfillment"
+    )
+
+    incluir_devolucao = st.sidebar.toggle(
+        "Somente Devolução",
+        value=False,
+        key="filtro_somente_devolucao"
+    )
+
+    somente_margem_negativa = st.sidebar.toggle(
+        "Somente Margem Negativa",
+        value=False,
+        key="filtro_somente_margem_negativa"
+    )
     # 6.5 FILTRO DE PERÍODO
     if not datas_validas.empty:
         st.sidebar.markdown("**Período Rápido**")
