@@ -1980,9 +1980,28 @@ try:
         )
 
     # 6.4 FILTROS DINÂMICOS
-    # Marketplace não será exibido como filtro lateral nesta nova ordem.
+
+    # Marketplace não será exibido como filtro lateral nesta nova organização.
     # Mantém a variável definida para não quebrar os blocos que ainda usam mkt_sel.
     mkt_sel = []
+
+    somente_fulfillment = st.sidebar.toggle(
+        "Somente Fulfillment",
+        value=False,
+        key="filtro_somente_fulfillment"
+    )
+
+    incluir_devolucao = st.sidebar.toggle(
+        "Somente Devolução",
+        value=False,
+        key="filtro_somente_devolucao"
+    )
+
+    somente_margem_negativa = st.sidebar.toggle(
+        "Somente Margem Negativa",
+        value=False,
+        key="filtro_somente_margem_negativa"
+    )
 
     filiais_validas_base = opcoes_unicas(
         base_para_opcoes(["filial"]),
@@ -2067,24 +2086,7 @@ try:
         placeholder="Todos os produtos",
         format_func=lambda key: produto_labels.get(key, key),
     )
-
-    somente_fulfillment = st.sidebar.toggle(
-        "Somente Fulfillment",
-        value=False,
-        key="filtro_somente_fulfillment"
-    )
-
-    incluir_devolucao = st.sidebar.toggle(
-        "Somente Devolução",
-        value=False,
-        key="filtro_somente_devolucao"
-    )
-
-    somente_margem_negativa = st.sidebar.toggle(
-        "Somente Margem Negativa",
-        value=False,
-        key="filtro_somente_margem_negativa"
-    )
+    
     # 6.5 FILTRO DE PERÍODO
     if not datas_validas.empty:
         st.sidebar.markdown("**Período Rápido**")
