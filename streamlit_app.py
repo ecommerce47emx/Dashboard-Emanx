@@ -2586,6 +2586,84 @@ try:
                 f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
                 f"Comparação alinhada pelo dia dentro do período"
             )
+        with aba_mapa:
+            df_mapa_estados = montar_df_mapa_estados(
+                df_f,
+                coluna_uf=COLUNA_UF_MAPA
+            )
+
+            if df_mapa_estados.empty:
+                st.info("Sem dados válidos por estado para exibir no mapa.")
+
+                with st.expander("Diagnóstico do mapa"):
+                    st.write("Coluna configurada:", COLUNA_UF_MAPA)
+                    st.write("Coluna existe na base filtrada:", COLUNA_UF_MAPA in df_f.columns)
+
+                    if COLUNA_UF_MAPA in df_f.columns:
+                        st.write(
+                            "UFs encontradas:",
+                            sorted(
+                                df_f[COLUNA_UF_MAPA]
+                                .dropna()
+                                .astype(str)
+                                .str.strip()
+                                .str.upper()
+                                .unique()
+                                .tolist()
+                            )
+                        )
+
+                    st.write("Colunas disponíveis:", df_f.columns.tolist())
+
+            else:
+                try:
+                    geojson_br = carregar_geojson_brasil(MAPA_BRASIL_GEOJSON)
+                    fig_mapa = criar_mapa_vendas_brasil(
+                        df_mapa_estados,
+                        geojson_br
+                    )
+
+                    if fig_mapa is not None:
+                        st.plotly_chart(
+                            fig_mapa,
+                            width="stretch"
+                        )
+
+                        top_estado = df_mapa_estados.iloc[0]
+
+                        st.caption(
+                            f"Estado com maior receita no período: "
+                            f"{top_estado['Estado']} ({top_estado['UF']}) | "
+                            f"Receita: {top_estado['Receita_Label']} | "
+                            f"Pedidos: {top_estado['Pedidos_Label']} | "
+                            f"% do total: {top_estado['Percentual_Label']}"
+                        )
+
+                        with st.expander("Ver detalhamento por estado"):
+                            st.dataframe(
+                                df_mapa_estados[
+                                    [
+                                        "Estado",
+                                        "UF",
+                                        "Receita_Label",
+                                        "Quantidade_Label",
+                                        "Pedidos_Label",
+                                        "Percentual_Label",
+                                    ]
+                                ].rename(
+                                    columns={
+                                        "Receita_Label": "Receita",
+                                        "Quantidade_Label": "Quantidade",
+                                        "Pedidos_Label": "Pedidos",
+                                        "Percentual_Label": "% do Total",
+                                    }
+                                ),
+                                width="stretch",
+                                hide_index=True
+                            )
+
+                except Exception as e:
+                    st.warning(f"Não foi possível carregar o mapa do Brasil: {e}")
 
         with aba_detalhamento:
             st.caption(
