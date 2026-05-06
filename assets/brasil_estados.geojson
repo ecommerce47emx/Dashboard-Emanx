@@ -1,0 +1,8 @@
+{
+  "type": "Feature",
+  "properties": {
+    "sigla": "MG",
+    "nome": "Minas Gerais"
+  },
+  "geometry": { ... }
+}
