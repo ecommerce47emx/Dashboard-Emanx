@@ -1,3 +1,5 @@
 streamlit
-st-gsheets-connection
 pandas
+altair
+streamlit-gsheets
+plotly
