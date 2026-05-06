@@ -3,6 +3,8 @@ import unicodedata
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import html
+import json
+import plotly.express as px
 
 import streamlit as st
 import pandas as pd
@@ -40,6 +42,9 @@ MARKETPLACE_CORES = [
     "#010101",  # TIKTOK
     "#64748b",  # MANUAL
 ]
+
+COLUNA_UF_MAPA = "Sigla correta"
+MAPA_BRASIL_GEOJSON = "assets/brasil_estados.geojson"
 
 # ──────────────────────────────────────────────
 # 3. CONEXÃO COM GOOGLE SHEETS
@@ -1891,6 +1896,157 @@ def preparar_tabela_resumo_fornecedor(df_resumo):
 
     return df_tabela
 
+# ──────────────────────────────────────────────
+# HELPERS: MAPA DE VENDAS POR ESTADO
+# ──────────────────────────────────────────────
+UF_NOME = {
+    "AC": "Acre",
+    "AL": "Alagoas",
+    "AP": "Amapá",
+    "AM": "Amazonas",
+    "BA": "Bahia",
+    "CE": "Ceará",
+    "DF": "Distrito Federal",
+    "ES": "Espírito Santo",
+    "GO": "Goiás",
+    "MA": "Maranhão",
+    "MT": "Mato Grosso",
+    "MS": "Mato Grosso do Sul",
+    "MG": "Minas Gerais",
+    "PA": "Pará",
+    "PB": "Paraíba",
+    "PR": "Paraná",
+    "PE": "Pernambuco",
+    "PI": "Piauí",
+    "RJ": "Rio de Janeiro",
+    "RN": "Rio Grande do Norte",
+    "RS": "Rio Grande do Sul",
+    "RO": "Rondônia",
+    "RR": "Roraima",
+    "SC": "Santa Catarina",
+    "SP": "São Paulo",
+    "SE": "Sergipe",
+    "TO": "Tocantins",
+}
+
+
+@st.cache_data
+def carregar_geojson_brasil(path_geojson):
+    with open(path_geojson, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def montar_df_mapa_estados(df_base, coluna_uf=COLUNA_UF_MAPA):
+    if df_base.empty or coluna_uf not in df_base.columns:
+        return pd.DataFrame()
+
+    colunas_necessarias = [
+        coluna_uf,
+        "Receita_Num",
+        "Qtd_Num",
+    ]
+
+    if not all(col in df_base.columns for col in colunas_necessarias):
+        return pd.DataFrame()
+
+    base = df_base.copy()
+
+    base["UF"] = (
+        base[coluna_uf]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    base = base[
+        base["UF"].isin(UF_NOME.keys())
+    ].copy()
+
+    if base.empty:
+        return pd.DataFrame()
+
+    resumo = (
+        base.groupby("UF", as_index=False)
+        .agg(
+            Receita=("Receita_Num", "sum"),
+            Quantidade=("Qtd_Num", "sum"),
+            Pedidos=("Receita_Num", "count"),
+        )
+        .sort_values("Receita", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    total_receita = float(resumo["Receita"].sum())
+
+    resumo["Estado"] = resumo["UF"].map(UF_NOME)
+
+    resumo["Percentual_Total"] = resumo["Receita"].apply(
+        lambda x: (x / total_receita) if total_receita > 0 else 0.0
+    )
+
+    resumo["Receita_Label"] = resumo["Receita"].apply(formatar_brl)
+    resumo["Quantidade_Label"] = resumo["Quantidade"].apply(formatar_int)
+    resumo["Pedidos_Label"] = resumo["Pedidos"].apply(formatar_int)
+    resumo["Percentual_Label"] = resumo["Percentual_Total"].apply(formatar_pct)
+
+    return resumo
+
+
+def criar_mapa_vendas_brasil(df_mapa, geojson_br):
+    if df_mapa.empty:
+        return None
+
+    fig = px.choropleth(
+        df_mapa,
+        geojson=geojson_br,
+        locations="UF",
+        featureidkey="properties.sigla",
+        color="Receita",
+        color_continuous_scale=[
+            "#dcfce7",
+            "#86efac",
+            "#22c55e",
+            "#166534",
+        ],
+        hover_name="Estado",
+        custom_data=[
+            "UF",
+            "Receita_Label",
+            "Quantidade_Label",
+            "Pedidos_Label",
+            "Percentual_Label",
+        ],
+    )
+
+    fig.update_traces(
+        marker_line_color="white",
+        marker_line_width=1.2,
+        hovertemplate=(
+            "<b>%{hovertext}</b><br>"
+            "UF: %{customdata[0]}<br>"
+            "Receita: %{customdata[1]}<br>"
+            "Quantidade: %{customdata[2]}<br>"
+            "Pedidos: %{customdata[3]}<br>"
+            "% do Total: %{customdata[4]}"
+            "<extra></extra>"
+        ),
+    )
+
+    fig.update_geos(
+        fitbounds="locations",
+        visible=False,
+        projection_type="mercator",
+    )
+
+    fig.update_layout(
+        margin=dict(l=0, r=0, t=10, b=0),
+        coloraxis_colorbar=dict(
+            title="Receita"
+        ),
+    )
+
+    return fig
+
 
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
@@ -2415,7 +2571,9 @@ try:
             df_resumo_periodos
         )
 
-        aba_grafico, aba_detalhamento = st.tabs(["Gráfico", "Detalhamento"])
+        aba_grafico, aba_mapa, aba_detalhamento = st.tabs(
+            ["Gráfico", "Mapa", "Detalhamento"]
+        )
 
         with aba_grafico:
             st.altair_chart(
