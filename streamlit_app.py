@@ -2036,17 +2036,23 @@ def criar_mapa_vendas_brasil(df_mapa, geojson_br):
         fitbounds="locations",
         visible=False,
         projection_type="mercator",
+        center=dict(lat=-14.2, lon=-53.2),
     )
 
     fig.update_layout(
-        margin=dict(l=0, r=0, t=10, b=0),
+        height=680,
+        autosize=True,
+        dragmode=False,
+        margin=dict(l=0, r=0, t=0, b=0),
         coloraxis_colorbar=dict(
-            title="Receita"
+            title="Receita",
+            thickness=14,
+            len=0.82,
+            y=0.5,
         ),
     )
 
     return fig
-
 
 # ──────────────────────────────────────────────
 # 5. CARGA E TRATAMENTO DOS DADOS
