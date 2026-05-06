@@ -2000,7 +2000,7 @@ def criar_mapa_vendas_brasil(df_mapa, geojson_br):
         df_mapa,
         geojson=geojson_br,
         locations="UF",
-        featureidkey="properties.sigla",
+        featureidkey="properties.SIGLA",
         color="Receita",
         color_continuous_scale=[
             "#dcfce7",
