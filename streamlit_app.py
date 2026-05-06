@@ -2040,7 +2040,7 @@ def criar_mapa_vendas_brasil(df_mapa, geojson_br):
     )
 
     fig.update_layout(
-        height=680,
+        height=580,
         autosize=True,
         dragmode=False,
         margin=dict(l=0, r=0, t=0, b=0),
