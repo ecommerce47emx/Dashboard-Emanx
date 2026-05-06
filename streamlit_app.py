@@ -2577,59 +2577,62 @@ try:
             df_resumo_periodos
         )
 
-        aba_grafico, aba_detalhamento, aba_mapa = st.tabs(
-            ["Gráfico", "Detalhamento", "Mapa"]
+        visao_vendas_dia = st.segmented_control(
+            "Visualização",
+            options=["Gráfico", "Detalhamento", "Mapa"],
+            default="Gráfico",
+            key="visao_vendas_dia",
+            label_visibility="collapsed",
         )
 
-        with aba_grafico:
+        if visao_vendas_dia == "Gráfico":
             st.altair_chart(
                 criar_grafico_comparativo(df_cmp),
                 use_container_width=True
             )
-        
+
             st.caption(
                 f"Período atual: {data_ini.strftime('%d/%m/%Y')} até {data_fim.strftime('%d/%m/%Y')} | "
                 f"Período anterior: {ini_ant_chart.strftime('%d/%m/%Y')} até {fim_ant_chart.strftime('%d/%m/%Y')} | "
                 f"Comparação alinhada pelo dia dentro do período"
             )
-        
-        
-        with aba_detalhamento:
+
+        elif visao_vendas_dia == "Detalhamento":
             st.caption(
                 "Resumo comparativo entre o período atual e o período anterior usado no gráfico."
             )
-        
+
             st.table(
                 df_resumo_periodos_tabela,
                 border="horizontal",
                 hide_index=True
             )
-        
+
             with st.expander("Ver intervalos comparados"):
                 st.dataframe(
                     df_resumo_periodos[["Período", "Intervalo"]],
                     use_container_width=True,
                     hide_index=True
                 )
-        
-        
-        with aba_mapa:
+
+        elif visao_vendas_dia == "Mapa":
             df_mapa_estados = montar_df_mapa_estados(
                 df_f,
                 coluna_uf=COLUNA_UF_MAPA
             )
-        
+
             if df_mapa_estados.empty:
                 st.info("Sem dados válidos por estado para exibir no mapa.")
-        
+
             else:
                 try:
                     geojson_br = carregar_geojson_brasil(MAPA_BRASIL_GEOJSON)
+
                     fig_mapa = criar_mapa_vendas_brasil(
                         df_mapa_estados,
                         geojson_br
                     )
-        
+
                     if fig_mapa is not None:
                         st.plotly_chart(
                             fig_mapa,
@@ -2641,9 +2644,9 @@ try:
                                 "responsive": True,
                             }
                         )
-        
+
                         top_estado = df_mapa_estados.iloc[0]
-        
+
                         st.caption(
                             f"Estado com maior receita no período: "
                             f"{top_estado['Estado']} ({top_estado['UF']}) | "
@@ -2651,7 +2654,7 @@ try:
                             f"Pedidos: {top_estado['Pedidos_Label']} | "
                             f"% do total: {top_estado['Percentual_Label']}"
                         )
-        
+
                         with st.expander("Ver detalhamento por estado"):
                             st.dataframe(
                                 df_mapa_estados[
@@ -2674,7 +2677,7 @@ try:
                                 width="stretch",
                                 hide_index=True
                             )
-        
+
                 except Exception as e:
                     st.warning(f"Não foi possível carregar o mapa do Brasil: {e}")
 
