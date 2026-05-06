@@ -2577,15 +2577,11 @@ try:
             df_resumo_periodos
         )
 
-        visao_vendas_dia = st.segmented_control(
-            "Visualização",
-            options=["Gráfico", "Detalhamento", "Mapa"],
-            default="Gráfico",
-            key="visao_vendas_dia",
-            label_visibility="collapsed",
+        aba_grafico, aba_detalhamento, aba_mapa = st.tabs(
+            ["Gráfico", "Detalhamento", "Mapa"]
         )
 
-        if visao_vendas_dia == "Gráfico":
+        with aba_grafico:
             st.altair_chart(
                 criar_grafico_comparativo(df_cmp),
                 use_container_width=True
@@ -2597,7 +2593,7 @@ try:
                 f"Comparação alinhada pelo dia dentro do período"
             )
 
-        elif visao_vendas_dia == "Detalhamento":
+        with aba_detalhamento:
             st.caption(
                 "Resumo comparativo entre o período atual e o período anterior usado no gráfico."
             )
@@ -2615,7 +2611,7 @@ try:
                     hide_index=True
                 )
 
-        elif visao_vendas_dia == "Mapa":
+        with aba_mapa:
             df_mapa_estados = montar_df_mapa_estados(
                 df_f,
                 coluna_uf=COLUNA_UF_MAPA
