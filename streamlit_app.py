@@ -2577,8 +2577,8 @@ try:
             df_resumo_periodos
         )
 
-        aba_grafico, aba_mapa, aba_detalhamento = st.tabs(
-            ["Gráfico", "Mapa", "Detalhamento"]
+        aba_grafico, aba_detalhamento, aba_mapa = st.tabs(
+            ["Gráfico", "Detalhamento", "Mapa"]
         )
 
         with aba_grafico:
