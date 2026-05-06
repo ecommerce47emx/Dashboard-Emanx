@@ -376,9 +376,19 @@ def render_ranking_produto(df_rank, metrica_ordenacao, top_n, incluir_devolucao=
             else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
         )
 
-        subtitle_html = (
-            f'<div class="ranking-subtitle">SKU: {sku}</div>'
-            if sku else ""
+        ticket_medio = (
+            float(row["Receita"]) / float(row["Quantidade"])
+            if float(row.get("Quantidade", 0) or 0) > 0
+            else 0.0
+        )
+        
+        subtitle_html = ""
+        
+        if sku:
+            subtitle_html += f'<div class="ranking-subtitle">SKU: {sku}</div>'
+        
+        subtitle_html += (
+            f'<div class="ranking-subtitle">Ticket médio: {formatar_brl(ticket_medio)}</div>'
         )
 
         card_html = "".join([
@@ -448,9 +458,21 @@ def render_ranking_grupo(df_rank, campo_grupo, metrica_ordenacao, top_n, incluir
             else '<span style="font-size:0.9rem;color:#64748b;">—</span>'
         )
 
-        subtitle_html = (
-            f'<div class="ranking-subtitle">Produto destaque: {produto_destaque}</div>'
-            if produto_destaque else ""
+        ticket_medio = (
+            float(row["Receita"]) / float(row["Quantidade"])
+            if float(row.get("Quantidade", 0) or 0) > 0
+            else 0.0
+        )
+        
+        subtitle_html = ""
+        
+        if produto_destaque:
+            subtitle_html += (
+                f'<div class="ranking-subtitle">Produto destaque: {produto_destaque}</div>'
+            )
+        
+        subtitle_html += (
+            f'<div class="ranking-subtitle">Ticket médio: {formatar_brl(ticket_medio)}</div>'
         )
 
         card_html = "".join([
